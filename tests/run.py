@@ -138,6 +138,48 @@ def main():
         page.keyboard.press("Delete")
         check(page.locator("#world .item").count() == 1, "Bild vom Board entfernt")
 
+        print("Rückgängig / Wiederholen")
+        page.locator("#viewport").focus()
+        page.keyboard.press("Control+z")
+        check(page.locator("#world .item").count() == 2, "Strg+Z: Entfernen rückgängig")
+        moods = "async () => { const d = (await import('./js/app.js')).state.data; return d.items.filter(i => i.tab !== d.activeTab).length; }"
+        page.keyboard.press("Control+z")
+        check(page.evaluate(moods) == 0, "Strg+Z: Bild im Tab „Moods“ rückgängig (Schritte in Reihenfolge, auch tabübergreifend)")
+        page.keyboard.press("Control+Shift+z")
+        check(page.evaluate(moods) == 1, "Strg+Umschalt+Z: wiederholt")
+        page.keyboard.press("Control+Shift+z")
+        check(page.locator("#world .item").count() == 1, "Strg+Umschalt+Z: Entfernen wiederholt")
+        page.keyboard.press("Control+y")
+        check(page.locator("#world .item").count() == 1, "Strg+Y bei leerem Verlauf: nichts passiert")
+        steps = page.evaluate("""async () => {
+          const app = await import('./js/app.js');
+          let n = 0; while (app.undo()) n++;
+          const empty = document.querySelectorAll('#world .item').length;
+          const tabs = document.querySelectorAll('#tabs .tab').length;
+          let m = 0; while (app.redo()) m++;
+          return { n, m, empty, tabs, after: document.querySelectorAll('#world .item').length,
+                   tabsAfter: [...document.querySelectorAll('#tabs .tab')].map(b => b.textContent) };
+        }""")
+        check(steps["n"] == 7 and steps["empty"] == 0 and steps["tabs"] == 1,
+              f"Alle 7 Schritte rückgängig bis zum leeren Board: {steps}")
+        check(steps["m"] == 7 and steps["after"] == 1 and steps["tabsAfter"] == ["Board", "Moods"],
+              "Alle Schritte wiederholt")
+        many = page.evaluate("""async () => {
+          const app = await import('./js/app.js');
+          for (let i = 0; i < 250; i++) await app.placeImage('test_motiv_a.jpg', i * 5, 0);
+          let n = 0; while (app.undo()) n++;
+          while (app.redo()) {}
+          for (let i = 0; i < 250; i++) app.undo();
+          return { n, limit: app.UNDO_STEPS };
+        }""")
+        check(many["n"] == many["limit"] == 200, f"Verlauf hält {many['limit']} Schritte: {many['n']}")
+        check(page.locator("#world .item").count() == 51, "Nach 200× Rückgängig bleiben die 50 ältesten Schritte stehen")
+        # aufräumen: zurück auf 1 Bild
+        page.evaluate("""async () => {
+          const app = await import('./js/app.js');
+          const s = app.state; s.data.items = s.data.items.filter(i => i.path !== 'test_motiv_a.jpg' || i.tab !== s.data.activeTab || i === s.data.items.find(x => x.tab === s.data.activeTab));
+        }""")
+
         print("Speichern")
         data = page.evaluate("""async () => {
           const app = await import('./js/app.js');

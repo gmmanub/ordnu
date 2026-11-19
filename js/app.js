@@ -11,6 +11,7 @@ const $ = id => document.getElementById(id);
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
 const SAVE_DELAY = 1000;          // ms nach letzter Änderung (PFLICHTENHEFT 1.2)
 const ORIGINAL_ABOVE_PX = 600;    // ab dieser Bildschirmbreite wird das Original statt der Vorschau gezeigt
+export const UNDO_STEPS = 200;    // Schritte Rückgängig (PFLICHTENHEFT 2, V1)
 
 export const state = {
   root: null,
@@ -22,6 +23,8 @@ export const state = {
   saveTimer: null,
   saving: null,
   dirty: false,
+  past: [],   // Rückgängig-Verlauf (nur für die laufende Sitzung)
+  future: [], // Wiederholen-Verlauf
 };
 
 let board;
@@ -81,6 +84,55 @@ export async function flushSave() {
 
 window.addEventListener('beforeunload', e => {
   if (state.dirty) { flushSave(); e.preventDefault(); e.returnValue = ''; }
+});
+
+// ---------- Rückgängig / Wiederholen ----------
+// Gemerkt wird der Inhalt (Tabs, Elemente, Tags), nicht die Ansicht (Zoom/Position).
+
+function snapshot() {
+  const d = state.data;
+  return JSON.stringify({ tabs: d.tabs.map(t => ({ id: t.id, name: t.name })), items: d.items, tags: d.tags });
+}
+
+// Vor jeder Inhaltsänderung aufrufen.
+function beforeChange() {
+  state.past.push(snapshot());
+  if (state.past.length > UNDO_STEPS) state.past.shift();
+  state.future = [];
+}
+
+function restore(text) {
+  const snap = JSON.parse(text);
+  const views = new Map(state.data.tabs.map(t => [t.id, t.view]));
+  state.data.tabs = snap.tabs.map(t => ({ ...t, view: views.get(t.id) || { x: 0, y: 0, scale: 1 } }));
+  state.data.items = snap.items;
+  state.data.tags = snap.tags;
+  if (!state.data.tabs.some(t => t.id === state.data.activeTab)) state.data.activeTab = state.data.tabs[0].id;
+  renderTabs();
+  board.setContent(tabItems(), activeTab().view);
+  markPlaced();
+  scheduleSave();
+}
+
+export function undo() {
+  if (!state.data || !state.past.length) return false;
+  state.future.push(snapshot());
+  restore(state.past.pop());
+  return true;
+}
+
+export function redo() {
+  if (!state.data || !state.future.length) return false;
+  state.past.push(snapshot());
+  restore(state.future.pop());
+  return true;
+}
+
+window.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.target.closest('input, textarea')) return;
+  const key = e.key.toLowerCase();
+  if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if ((key === 'z' && e.shiftKey) || key === 'y') { e.preventDefault(); redo(); }
 });
 
 // ---------- Bilder ----------
@@ -148,6 +200,7 @@ export async function placeImage(path, x, y, { centered = true } = {}) {
   const t = await ensureThumb(path);
   const w = DEFAULT_IMAGE_WIDTH;
   const h = t ? Math.round(w * t.height / t.width) : w;
+  beforeChange();
   const item = {
     id: newId('img'), tab: state.data.activeTab, type: 'image', path,
     x: Math.round(centered ? x - w / 2 : x), y: Math.round(centered ? y - h / 2 : y), w, h,
@@ -233,7 +286,7 @@ function renameTab(tab, button) {
   const finish = commit => {
     if (done) return; done = true;
     const v = input.value.trim();
-    if (commit && v && v !== tab.name) { tab.name = v; scheduleSave(); }
+    if (commit && v && v !== tab.name) { beforeChange(); tab.name = v; scheduleSave(); }
     renderTabs();
   };
   input.addEventListener('keydown', e => {
@@ -245,6 +298,7 @@ function renameTab(tab, button) {
 }
 
 function addTab() {
+  beforeChange();
   const tab = createTab(`Board ${state.data.tabs.length + 1}`);
   state.data.tabs.push(tab);
   state.data.activeTab = null;
@@ -282,7 +336,7 @@ export async function openProject(name) {
   releaseImages();
   const projectDir = await state.root.getDirectoryHandle(name);
   const { appDir, data, notice } = await loadProjectData(projectDir);
-  Object.assign(state, { projectName: name, projectDir, appDir, data, dirty: false });
+  Object.assign(state, { projectName: name, projectDir, appDir, data, dirty: false, past: [], future: [] });
   if (notice) toast(notice, 10000);
 
   const found = await scanImages(projectDir);
@@ -313,6 +367,7 @@ function updateZoomLabel(view) {
 
 async function init() {
   board = new Board($('viewport'), $('world'), {
+    onBeforeChange: beforeChange,
     onChange: () => { markPlaced(); scheduleSave(); },
     onRemove: ids => {
       state.data.items = state.data.items.filter(i => !ids.has(i.id));

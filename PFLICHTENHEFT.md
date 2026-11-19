@@ -75,10 +75,11 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Notizzettel / Text
 - Tags tippen: Datum (automatisch aus Datei, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
 - Filter nach Tags
-- Vorschlag (Freigabe offen): Rückgängig/Wiederholen (Strg+Z / Strg+Y)
+- Rückgängig/Wiederholen (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y). 200 Schritte, gilt für Inhalt (Bilder, Rahmen, Notizen, Tags, Tabs), nicht für Zoom/Ansicht. Verlauf nur für die laufende Sitzung (nicht in ordnu.json).
 
 #### Bau-Reihenfolge V1
-1. Grundgerüst: Ordnerzugriff, Projektliste, `.ordnu/`, Speichern, Tabs, Fläche (Verschieben/Zoomen), Bilderliste mit Vorschauen, Bilder aufs Board legen und verschieben
+1. Grundgerüst: Ordnerzugriff, Projektliste, `.ordnu/`, Speichern, Tabs, Fläche (Verschieben/Zoomen), Bilderliste mit Vorschauen, Bilder aufs Board legen und verschieben – fertig 19.11.
+1b. Rückgängig/Wiederholen – fertig 19.11.
 2. Bilder skalieren, Mehrfachauswahl, Löschen vom Board
 3. Rahmen
 4. Notizzettel / Text
@@ -120,6 +121,7 @@ Zeichnen, Formen-Bibliothek, Vorlagen, Zusammenarbeit.
 | Alles zeigen | Taste `F` |
 | Auswahl | Klick, Umschalt+Klick, Rahmen aufziehen auf leerer Fläche |
 | Löschen vom Board | `Entf` – entfernt nur vom Board, nie die Datei |
+| Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z (oder Strg+Y) |
 
 ---
 

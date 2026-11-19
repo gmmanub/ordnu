@@ -19,6 +19,7 @@ App: https://gmmanub.github.io/ordnu/
 | Alles zeigen | `F` |
 | Mehrere auswählen | Umschalt + Klick |
 | Vom Board entfernen | `Entf` (die Datei bleibt erhalten) |
+| Rückgängig / Wiederholen | `Strg+Z` / `Strg+Umschalt+Z` |
 | Tab umbenennen | Doppelklick auf den Tab |
 
 Gespeichert wird automatisch in `<Projekt>/.ordnu/` (Boards, Tags, Vorschaubilder).

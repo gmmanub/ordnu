@@ -3,9 +3,10 @@
 import { zoomAt, screenToWorld, fitView } from './model.js';
 
 export class Board {
-  constructor(viewport, world, { onChange, onRemove, onViewChange, onDropImage, getImageUrl }) {
+  constructor(viewport, world, { onBeforeChange, onChange, onRemove, onViewChange, onDropImage, getImageUrl }) {
     this.viewport = viewport;
     this.world = world;
+    this.onBeforeChange = onBeforeChange; // vor jeder Inhaltsänderung (für Rückgängig)
     this.onChange = onChange;           // Inhalt geändert → speichern
     this.onRemove = onRemove;           // (Set von IDs) vom Board entfernt
     this.onViewChange = onViewChange;   // nur Ansicht geändert
@@ -196,7 +197,7 @@ export class Board {
     let moved = false;
     const move = ev => {
       const dx = (ev.clientX - sx) / this.view.scale, dy = (ev.clientY - sy) / this.view.scale;
-      if (Math.abs(dx) + Math.abs(dy) > 0) moved = true;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 0) { moved = true; this.onBeforeChange(); }
       for (const s of start) {
         s.i.x = s.x + dx; s.i.y = s.y + dy;
         const n = this.nodes.get(s.i.id);
@@ -217,6 +218,7 @@ export class Board {
   // Entfernt nur vom Board – nie die Datei (PFLICHTENHEFT 3).
   removeSelected() {
     if (!this.selected.size) return;
+    this.onBeforeChange();
     const ids = new Set(this.selected);
     this.items = this.items.filter(i => !ids.has(i.id));
     this.selected = new Set();

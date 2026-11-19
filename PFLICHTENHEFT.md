@@ -111,26 +111,41 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Spracheingabe für Tags: Whisper offline, Push-to-talk, feste Schlüsselwörter („Datum 18. November, von …, Shot …, Variante B, Version 3“). Tippen geht immer.
 - Modellgröße vs. GitHub-Grenzen prüfen (geschätzt 75–150 MB; GitHub-Grenze pro Datei 100 MB).
 
-### V2 (Roadmap, Reihenfolge 19.11. neu festgelegt)
-1. V2.0 Dateinamen-Schema pro Projekt einstellbar (Anlieferungen sind anfangs chaotisch benannt; ggf. mehrere Schemata je Absender) → Shot/Version/Variante automatisch als Tags; Rest wird von Hand getaggt
-2. V2.1 Rahmen mit Regeln = automatisch einsortieren (z. B. Shot = SH010; neue passende Bilder landen dort, neueste Version vorne) + „neueste Variante je Shot“ – **Top-Priorität**
-3. V2.2 Collections (virtuelle, verschachtelbare Sammlungen – Basis für Präsentation)
-4. V2.3 Zeitleiste
-5. V2.4 Vergleich (nebeneinander / Schieberegler)
-6. V2.5 Präsentationsmodus (aus Collections)
-7. V2.6 Pfeile
-8. V2.7 Sprachbefehle fürs Board (baut auf V1b)
+### V2 (Roadmap, freigegeben 19.11., Top-Block zuerst)
+1. **V2.0 Dateinamen-Schema pro Projekt** (Anlieferungen anfangs chaotisch benannt; ggf. mehrere Schemata je Absender) → Shot/Version/Variante automatisch als Tags; Rest von Hand.
+   Lernt aus Korrekturen (reine Regeln, keine KI): ordnet Manu ein Bild von Hand zu, fragt die App z. B. „Dateien mit `xyz` künftig immer Shot 020?“. Sicherheitsnetz: bei Unklarheit nachfragen, nie still raten.
+2. **V2.1 Eingangsrahmen + Einsortieren – Top-Priorität**
+   - Neue Bilder landen gesammelt in einem Eingangsrahmen (nach Tag).
+   - Knopf „Einsortieren“ in bestehende Rahmen mit Regeln (z. B. Shot = SH010): erst Vorschau mit Linien zum Zielrahmen, dann bestätigen → ein einziger Rückgängig-Schritt.
+   - Unklare Fälle bleiben im Eingang mit Grund („Shot nicht erkannt“, „passt zu zwei Rahmen“).
+   - Nie verschieben, was Manu selbst platziert hat – nur neue Bilder werden abgelegt.
+   - Versionsstapel: neue Version vorne, ältere dahinter (zuerst die einfachere Lösung; Aufklappen vs. eigenes Fenster offen).
+   - „Neueste Variante je Shot“; Zähler am Tab („Anlieferungen (7 neu)“).
+3. **V2.2 „Struktur anlegen“ aus Tags** (z. B. Shots als Spalten × Varianten als Zeilen; Gruppierung wählbar: Shot × Variante, Absender, Tag).
+4. **V2.3 Vergleich** – wichtig: Bilder übereinanderlegen und an/aus schalten (wie früher in Photoshop/After Effects), dazu nebeneinander und Schieberegler. Kann mit dem Versionsstapel verbunden werden.
+5. V2.4 Collections (virtuelle, verschachtelbare Sammlungen – Basis für Präsentation)
+6. V2.5 Zeitleiste
+7. V2.6 Präsentationsmodus (aus Collections)
+8. V2.7 Pfeile
+9. V2.8 Sprachbefehle fürs Board (baut auf V1b)
+
+Voraussetzungen aus V1: Rahmen (Bau-Schritt 3) und Tags (Bau-Schritt 5).
 
 ### V3 (Idee, vorgemerkt)
 - Nutzung bleibt am Rechner (Laptop/ggf. Workstation), kein volles Board am Handy.
 - Zwischenlösung: Präsentationen exportieren und verschicken, stark passwortgeschützt (Idee: eine einzelne verschlüsselte Datei, offline im Browser/Handy zu öffnen; Passwort über anderen Kanal). Achtung NDA: Bilder verlassen dabei bewusst den Rechner – Details in V3 klären.
+
+### V4 (Ideen, vorgemerkt)
+- Review-Kommentare mit Einzeichnungen auf Bildern (wie Frame.io). Abgrenzung: Anmerkungen für Feedback, kein allgemeines Zeichenwerkzeug.
+- Bewegtbild: MP4/Sequenzen auf dem Board; Pop-up-Player mit flüssigem Scrubben, Vergleichs-Schieberegler, An/Aus-Vergleich, Timeline zum Verschieben/Ausrichten (z. B. wenn nur ein Teil eines Shots kommt), einfacher Schnitt zum Shots-Draufziehen.
+  Prüfen (geschätzt): Chrome spielt MP4 (H.264), ProRes/MOV und EXR/DPX-Sequenzen meist nicht; bildgenaues Scrubben im Browser begrenzt (ggf. WebCodecs). Mögliche Lösung: Review-MP4s, Originale unberührt.
 
 ### Später / ungeplant
 - Umbenannte/verschobene Bilder wiederfinden (z. B. über Größe + Änderungsdatum)
 - TIFF/PSD-Unterstützung prüfen
 
 ### Bewusst nicht
-Zeichnen, Formen-Bibliothek, Vorlagen, Zusammenarbeit.
+Allgemeines Zeichnen (Review-Einzeichnungen siehe V4), Formen-Bibliothek, Vorlagen, Zusammenarbeit.
 
 ---
 

@@ -26,6 +26,8 @@ App: https://gmmanub.github.io/ordnu/
 | Ordner aufs Board | Ordner aus dem Projekt im Explorer packen und aufs Board ziehen – Bilder, die schon im Tab liegen, werden übersprungen |
 | Datum ändern | Rechtsklick auf ein Bild in der Bilderliste |
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen |
+| Rahmen anlegen | „▢ Rahmen“ oder `R`, dann aufziehen · um eine Auswahl: `Strg+G` |
+| Rahmen bearbeiten | Beschriftung/Rand ziehen = mit Inhalt verschieben · Doppelklick auf Beschriftung = umbenennen · Ecken = Größe · Farbpunkte · `Entf` löscht nur den Rahmen |
 
 Die Bilderliste ist nach Tagen sortiert (Eingangsdatum: wann ordnu die Datei zuerst gesehen hat; Tagesordner im Format `JJ.MM.TT` haben Vorrang). Neue Bilder sind mit „Neu“ markiert.
 

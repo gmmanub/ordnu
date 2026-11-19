@@ -161,3 +161,27 @@ button.danger { background: var(--warn); border-color: var(--warn); color: #1b1c
 /* Kacheln mit fester Höhe, damit lange Listen nicht zusammengedrückt werden */
 .image-list { min-height: 0; grid-auto-rows: max-content; }
 .image-list li.tile { aspect-ratio: auto; height: 96px; }
+
+/* Rahmen (Bau-Schritt 3): Linie und Beschriftung bleiben auf dem Bildschirm gleich groß (--inv = 1/Zoom) */
+.item.frame { overflow: visible; pointer-events: none; background: color-mix(in srgb, var(--fc) 9%, transparent);
+  border: calc(2px * var(--inv, 1)) solid var(--fc); border-radius: calc(4px * var(--inv, 1)); box-shadow: none; }
+.item.frame.selected { outline: none; border-style: solid; box-shadow: 0 0 0 calc(2px * var(--inv, 1)) var(--select); }
+.frame-label { position: absolute; left: calc(-2px * var(--inv, 1)); bottom: 100%;
+  margin-bottom: calc(4px * var(--inv, 1)); font-size: calc(13px * max(1, var(--inv, 1)));
+  font-weight: 600; line-height: 1.2; color: var(--fc); white-space: nowrap; pointer-events: auto;
+  cursor: move; user-select: none; }
+.frame-label.editing { visibility: hidden; }
+.frame-rename { position: absolute; z-index: 6; font: 600 13px system-ui, "Segoe UI", sans-serif; color: var(--fc);
+  background: var(--panel); border: 1px solid var(--fc); border-radius: 4px; padding: 2px 6px; min-width: 12ch; }
+.viewport.tool-frame { cursor: crosshair; }
+.viewport.tool-frame .item { cursor: crosshair; }
+.frame-draft { border: 2px dashed var(--accent); background: rgb(232 176 74 / 0.08); }
+.topbar button.tool.active { border-color: var(--accent); color: var(--accent); }
+
+/* Auswahl-Leiste */
+.sel-bar { display: flex; gap: 4px; align-items: center; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px 6px; pointer-events: auto; white-space: nowrap; }
+.overlay .sel-bar button { padding: 3px 8px; font-size: 12px; }
+.overlay .sel-bar button.color-dot { width: 16px; height: 16px; padding: 0; border-radius: 50%;
+  background: var(--dot); border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line); }
+.overlay .sel-bar button.color-dot:hover { box-shadow: 0 0 0 1px #fff; }

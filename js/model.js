@@ -120,10 +120,66 @@ export function normalizeItem(item) {
   for (const k of ['x', 'y', 'w', 'h']) if (!Number.isFinite(item[k])) item[k] = k === 'w' || k === 'h' ? 100 : 0;
   item.w = Math.max(1, item.w); item.h = Math.max(1, item.h);
   if (item.type === 'image') {
-    if (!(item.ar > 0)) item.ar = item.h / item.w; // ohne Ausschnitt entspricht der Rahmen dem Bild
+    if (!(item.ar > 0)) item.ar = item.h / item.w; // ohne Ausschnitt entspricht der Ausschnitt dem Bild
     item.crop = normalizeCrop(item.crop);
   }
+  if (item.type === 'frame') {
+    item.name = typeof item.name === 'string' ? item.name : 'Rahmen';
+    if (!FRAME_COLORS.some(c => c.key === item.color)) item.color = 'standard';
+    if (item.rule === undefined) item.rule = null; // Platz für Regeln (V2 Einsortieren)
+  }
   return item;
+}
+
+// ---------- Rahmen (PFLICHTENHEFT 2, Bau-Schritt 3) ----------
+// Rahmen sind Elemente type 'frame' { name, color, rule }. Sie liegen immer hinter Bildern.
+
+export const FRAME_COLORS = [
+  { key: 'standard', label: 'Standard', hex: '#9a9ba3' },
+  { key: 'ocker', label: 'Ocker', hex: '#e8b04a' },
+  { key: 'blau', label: 'Blau', hex: '#6fa8dc' },
+  { key: 'salbei', label: 'Salbei', hex: '#8fbf7f' },
+  { key: 'rost', label: 'Rost', hex: '#d98880' },
+  { key: 'lavendel', label: 'Lavendel', hex: '#a99ad6' },
+  { key: 'petrol', label: 'Petrol', hex: '#5fb3b3' },
+  { key: 'rose', label: 'Rosé', hex: '#d79bb8' },
+  { key: 'schiefer', label: 'Schiefer', hex: '#7f8fa6' },
+];
+export const FRAME_PAD = 40;           // Rand bei „Rahmen um Auswahl“
+export const FRAME_DEFAULT = { w: 480, h: 320 }; // Größe bei Klick ohne Ziehen
+
+export function frameHex(key) {
+  return (FRAME_COLORS.find(c => c.key === key) || FRAME_COLORS[0]).hex;
+}
+
+export function createFrame(tabId, x, y, w, h, name = 'Rahmen', color = 'standard') {
+  return {
+    id: newId('frame'), tab: tabId, type: 'frame',
+    x: Math.round(x), y: Math.round(y), w: Math.round(Math.max(MIN_SIZE, w)), h: Math.round(Math.max(MIN_SIZE, h)),
+    name, color, rule: null,
+  };
+}
+
+export function contains(outer, inner) {
+  return inner.x >= outer.x && inner.y >= outer.y
+    && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
+}
+
+function centerInside(f, it) {
+  const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+  return cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
+}
+
+// Inhalt eines Rahmens: Elemente, deren Mittelpunkt darin liegt; andere Rahmen nur, wenn sie komplett darin liegen.
+export function frameContents(frame, items) {
+  return items.filter(it => it.id !== frame.id
+    && (it.type === 'frame' ? contains(frame, it) : centerInside(frame, it)));
+}
+
+// Zeichenreihenfolge: Rahmen hinten (große hinter kleinen), sonst Datenreihenfolge.
+export function drawOrder(items) {
+  const frames = items.filter(i => i.type === 'frame').sort((a, b) => b.w * b.h - a.w * a.h);
+  return [...frames, ...items.filter(i => i.type !== 'frame')];
 }
 
 // ---------- Ausschnitt / Bildtransform ----------

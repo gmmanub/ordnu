@@ -3,6 +3,7 @@
 import {
   createTab, newId, DEFAULT_IMAGE_WIDTH, defaultCrop, isImageName,
   effectiveDate, dateSuggestion, formatDate, formatDay,
+  createFrame, boundsOf, FRAME_PAD,
 } from './model.js';
 import {
   supportsFolders, rememberRoot, recallRoot, hasPermission, listProjects,
@@ -205,7 +206,30 @@ window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if ((key === 'z' && e.shiftKey) || key === 'y') { e.preventDefault(); redo(); }
+  else if (key === 'g' && !e.shiftKey) { e.preventDefault(); frameAroundSelection(); }
 });
+
+// ---------- Rahmen (Bau-Schritt 3) ----------
+
+// Rahmen anlegen (aufgezogen oder um Auswahl). Danach gleich Namen bearbeiten.
+export function addFrame(area, { rename = true } = {}) {
+  beginChange();
+  const f = createFrame(state.data.activeTab, area.x, area.y, area.w, area.h);
+  state.data.items.push(f);
+  board.replaceItems(tabItems());
+  board.setSelection([f.id]);
+  commitChange();
+  if (rename) board.startRename(f.id);
+  return f;
+}
+
+export function frameAroundSelection() {
+  if (!state.data || $('app').hidden || board.cropId) return null;
+  const sel = board.selectedItems();
+  if (!sel.length) { toast('Erst etwas auswählen – dann Strg+G.'); return null; }
+  const b = boundsOf(sel);
+  return addFrame({ x: b.x - FRAME_PAD, y: b.y - FRAME_PAD, w: b.w + 2 * FRAME_PAD, h: b.h + 2 * FRAME_PAD });
+}
 
 // ---------- Tags (Datenebene; Bedienoberfläche folgt in Bau-Schritt 5) ----------
 // Tags hängen am Bild (Pfad) und gelten in allen Tabs. Rückgängig im Tab, in dem geändert wurde.
@@ -852,6 +876,9 @@ async function init() {
     },
     onViewApplied: view => { $('zoom-label').textContent = `${Math.round(view.scale * 100)} %`; },
     onDropImage: (path, x, y) => placeImage(path, x, y),
+    onCreateFrame: area => addFrame(area),
+    onFrameAround: () => frameAroundSelection(),
+    onToolChange: tool => $('btn-frame')?.classList.toggle('active', tool === 'frame'),
     onDropHandles: (handles, x, y) => dropHandles(handles, x, y).catch(err => toast(err.message, 8000)),
     getImageUrl: imageUrlFor,
   });
@@ -859,6 +886,7 @@ async function init() {
   $('btn-pick-root').addEventListener('click', pickRoot);
   $('btn-change-root').addEventListener('click', pickRoot);
   $('btn-add-tab').addEventListener('click', addTab);
+  $('btn-frame').addEventListener('click', () => board.setTool(board.tool === 'frame' ? null : 'frame'));
   $('btn-rescan').addEventListener('click', () => rescan().then(r => {
     if (!r.added.length) toast('Keine neuen Bilder.');
   }));

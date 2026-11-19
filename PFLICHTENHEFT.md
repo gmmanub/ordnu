@@ -90,11 +90,11 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Vom Board entfernen: `Entf` oder Mülleimer an der Auswahl (Originale werden nie angefasst)
 - Neue Dateien erkennen + „Neu“-Markierung + Filter „Nur neue“; Ordner/Dateien aus dem Projekt aufs Board ziehen; Eingangsdatum, Tagessortierung, Korrekturvorschlag (siehe 1.1 und 1.5) – freigegeben 19.11.
 - Ausschnitt / Bildtransform (nicht-destruktiv): Doppelklick aufs Bild; Enter/Esc/„Fertig“ beendet; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
-- Rahmen: Farbe, Name; Inhalt wandert beim Verschieben mit
-- Notizzettel / Text
+- Rahmen (fertig 19.11.): aufziehen (Knopf „Rahmen“ / Taste R; Klick ohne Ziehen = 480×320) oder „Rahmen um Auswahl“ (Knopf in der Auswahl-Leiste / Strg+G, 40 Rand). Farbiger Rand + leicht transparente Füllung, Palette mit 8 Farben + Standard (Ocker, Blau, Salbei, Rost, Lavendel, Petrol, Rosé, Schiefer). Name als Beschriftung oben links in Rahmenfarbe, nach dem Anlegen gleich bearbeitbar, sonst Doppelklick auf Beschriftung/Rand (Enter/Esc); Beschriftung und Linie bleiben auf dem Bildschirm gleich groß (bei kleinem Zoom lesbar). Rahmen liegen immer hinter Bildern (große hinter kleinen). Klick auf Beschriftung oder Rand wählt den Rahmen, Klick ins leere Innere startet den Auswahlrahmen; der Auswahlrahmen erfasst Rahmen nur, wenn sie komplett umschlossen sind. Verschieben nimmt den Inhalt mit (Elemente, deren Mittelpunkt bei Beginn im Rahmen liegt; andere Rahmen nur, wenn komplett darin – verschachtelt). Skalieren per Anfasser: nur der Rahmen, Seitenverhältnis frei, Inhalt bleibt stehen. Farbe per Farbpunkten in der Auswahl-Leiste (auch mehrere). Löschen entfernt nur den Rahmen, der Inhalt bleibt. Alles rückgängig machbar (Verschieben mit Inhalt = 1 Schritt). Gespeichert als Element `type: 'frame'` mit `name`, `color`, `rule` (`rule` = null, Platz für V2 Einsortieren).
+- Notizzettel / Text (Bau-Schritt 4): Hintergrundfarbe der Notizzettel UND Textfarbe einstellbar (Palette), Schriftgröße einstellbar; freier Text ebenfalls mit Farbe.
 - Tags tippen: Datum (automatisch, siehe 1.5, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
 - Filter nach Tags
-- Rückgängig/Wiederholen PRO TAB (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y), wirkt nur im aktiven Tab. 200 Schritte je Tab, gilt für Inhalt (Bilder, Ausschnitt, später Rahmen, Notizen, Tags), nicht für Zoom/Ansicht. Tab umbenennen/sortieren/löschen nicht per Strg+Z (Löschen: „Rückgängig“-Hinweis). Verlauf bleibt über Tab-Wechsel und Schließen der App erhalten (`.ordnu/verlauf.json`). Tags hängen am Bild und gelten in allen Tabs; eine Tag-Änderung wird je Feld in dem Tab rückgängig gemacht, in dem sie gemacht wurde – wurde das Feld inzwischen in einem anderen Tab geändert, bleibt die spätere Änderung stehen (mit Hinweis).
+- Rückgängig/Wiederholen PRO TAB (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y), wirkt nur im aktiven Tab. 200 Schritte je Tab, gilt für Inhalt (Bilder, Ausschnitt, Rahmen, später Notizen, Tags), nicht für Zoom/Ansicht. Tab umbenennen/sortieren/löschen nicht per Strg+Z (Löschen: „Rückgängig“-Hinweis). Verlauf bleibt über Tab-Wechsel und Schließen der App erhalten (`.ordnu/verlauf.json`). Tags hängen am Bild und gelten in allen Tabs; eine Tag-Änderung wird je Feld in dem Tab rückgängig gemacht, in dem sie gemacht wurde – wurde das Feld inzwischen in einem anderen Tab geändert, bleibt die spätere Änderung stehen (mit Hinweis).
 
 #### Bau-Reihenfolge V1
 1. Grundgerüst: Ordnerzugriff, Projektliste, `.ordnu/`, Speichern, Tabs, Fläche (Verschieben/Zoomen), Bilderliste mit Vorschauen, Bilder aufs Board legen und verschieben – fertig 19.11.
@@ -102,8 +102,8 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 2. Bilder skalieren, Auswahlrahmen, Mülleimer, Tabs löschen/sortieren, Rückgängig pro Tab mit verlauf.json – fertig 19.11.
 2b. Ausschnitt / Bildtransform – fertig 19.11.
 2c. Neue Dateien erkennen, „Neu“, Ordner reinziehen, Eingangsdatum, Tagessortierung, Korrekturvorschlag – fertig 19.11.
-3. Rahmen
-4. Notizzettel / Text
+3. Rahmen – fertig 19.11.
+4. Notizzettel / Text (Hintergrund- und Textfarbe, Schriftgröße)
 5. Tags (Einzel + Mehrfach, Vorschläge; Datum-Datenebene steht schon)
 6. Filter
 
@@ -136,7 +136,8 @@ Voraussetzungen aus V1: Rahmen (Bau-Schritt 3) und Tags (Bau-Schritt 5).
 - Zwischenlösung: Präsentationen exportieren und verschicken, stark passwortgeschützt (Idee: eine einzelne verschlüsselte Datei, offline im Browser/Handy zu öffnen; Passwort über anderen Kanal). Achtung NDA: Bilder verlassen dabei bewusst den Rechner – Details in V3 klären.
 
 ### V4 (Ideen, vorgemerkt)
-- Review-Kommentare mit Einzeichnungen auf Bildern (wie Frame.io). Abgrenzung: Anmerkungen für Feedback, kein allgemeines Zeichenwerkzeug.
+- Einfaches Zeichnen (von Manu gewünscht): Freihand auf dem Board und über Bildern, Farbe, Strichstärke, Radierer/Löschen. Mit Glättungsfunktion für krakelige Mausstriche (Strich-Stabilisierung). Gehört zusammen mit den Review-Einzeichnungen.
+- Review-Kommentare mit Einzeichnungen auf Bildern (wie Frame.io).
 - Bewegtbild: MP4/Sequenzen auf dem Board; Pop-up-Player mit flüssigem Scrubben, Vergleichs-Schieberegler, An/Aus-Vergleich, Timeline zum Verschieben/Ausrichten (z. B. wenn nur ein Teil eines Shots kommt), einfacher Schnitt zum Shots-Draufziehen.
   Prüfen (geschätzt): Chrome spielt MP4 (H.264), ProRes/MOV und EXR/DPX-Sequenzen meist nicht; bildgenaues Scrubben im Browser begrenzt (ggf. WebCodecs). Mögliche Lösung: Review-MP4s, Originale unberührt.
 
@@ -145,7 +146,7 @@ Voraussetzungen aus V1: Rahmen (Bau-Schritt 3) und Tags (Bau-Schritt 5).
 - TIFF/PSD-Unterstützung prüfen
 
 ### Bewusst nicht
-Allgemeines Zeichnen (Review-Einzeichnungen siehe V4), Formen-Bibliothek, Vorlagen, Zusammenarbeit.
+Formen-Bibliothek, Vorlagen, Zusammenarbeit. (Zeichnen war nur ein früher Vorschlag von Claude – Manu will es, siehe V4.)
 
 ---
 
@@ -166,6 +167,8 @@ Allgemeines Zeichnen (Review-Einzeichnungen siehe V4), Formen-Bibliothek, Vorlag
 | Ordner aufs Board | Ordner oder Bilder aus dem Projekt im Explorer packen und aufs Board ziehen |
 | Datum | Rechtsklick auf ein Bild in der Bilderliste; Vorschläge „Übernehmen/Ignorieren“; Schalter „Datum-Vorschläge“ |
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen (mit Rückfrage) |
+| Rahmen anlegen | Knopf „▢ Rahmen“ oder Taste `R`, dann aufziehen (Klick = Standardgröße, `Esc` = abbrechen); „Rahmen um Auswahl“ in der Auswahl-Leiste oder `Strg+G` |
+| Rahmen bearbeiten | Beschriftung oder Rand anklicken/ziehen (Inhalt wandert mit); Doppelklick auf Beschriftung = umbenennen; Eck-Anfasser = Größe (Inhalt bleibt); Farbpunkte in der Auswahl-Leiste; `Entf` = nur Rahmen löschen |
 
 ---
 

@@ -3,10 +3,12 @@
 import {
   zoomAt, screenToWorld, fitView, boundsOf, intersects, scaleGroup,
   imageRect, setImageRect, setWindow, resetCrop, rotate, normalizeAngle, MIN_SIZE,
+  FRAME_COLORS, FRAME_DEFAULT, frameHex, frameContents, drawOrder, contains,
 } from './model.js';
 
 const ROT_HANDLE_PX = 34;  // Abstand des Dreh-Anfassers über dem Bild (Bildschirm-Pixel)
 const SNAP_DEG = 15;       // Umschalt beim Drehen
+const EDGE_PX = 8;         // so nah (Bildschirm-Pixel) am Rahmenrand gilt ein Klick als „auf den Rahmen“
 
 export class Board {
   constructor(viewport, world, overlay, cb) {
@@ -20,12 +22,16 @@ export class Board {
     this.nodes = new Map();
     this.cropId = null;                 // Element im Ausschnitt-Modus
     this.ghost = null;
+    this.tool = null;                   // 'frame' = nächstes Ziehen legt einen Rahmen an
+    this.renaming = null;               // { id, input } – Rahmen-Name wird bearbeitet
     this.spaceDown = false;
     this.bind();
   }
 
   setContent(items, view) {
     this.cropId = null;
+    this.renaming = null;
+    this.setTool(null);
     this.items = items;
     this.view = { ...view };
     this.selected.clear();
@@ -46,13 +52,43 @@ export class Board {
 
   byId(id) { return this.items.find(i => i.id === id); }
 
-  // Oberstes Element an einem Board-Punkt.
+  // Oberstes Bild an einem Board-Punkt (Rahmen zählen nicht – deren Inneres ist frei klickbar).
   hitTest(p) {
     for (let n = this.items.length - 1; n >= 0; n--) {
       const i = this.items[n];
+      if (i.type === 'frame') continue;
       if (p.x >= i.x && p.x <= i.x + i.w && p.y >= i.y && p.y <= i.y + i.h) return i;
     }
     return null;
+  }
+
+  // Rahmen, dessen Rand nahe am Punkt liegt (kleinere/vordere zuerst).
+  frameEdgeAt(p) {
+    const tol = EDGE_PX / this.view.scale;
+    const frames = drawOrder(this.items).filter(i => i.type === 'frame').reverse();
+    for (const f of frames) {
+      const outer = p.x >= f.x - tol && p.x <= f.x + f.w + tol && p.y >= f.y - tol && p.y <= f.y + f.h + tol;
+      const inner = p.x > f.x + tol && p.x < f.x + f.w - tol && p.y > f.y + tol && p.y < f.y + f.h - tol;
+      if (outer && !inner) return f;
+    }
+    return null;
+  }
+
+  // Rahmen, dessen Beschriftung unter dem Bildschirmpunkt liegt.
+  frameLabelAt(clientX, clientY) {
+    for (const f of drawOrder(this.items).filter(i => i.type === 'frame').reverse()) {
+      const lbl = this.nodes.get(f.id)?.querySelector('.frame-label');
+      if (!lbl) continue;
+      const r = lbl.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return f;
+    }
+    return null;
+  }
+
+  setTool(tool) {
+    this.tool = tool;
+    this.viewport.classList.toggle('tool-frame', tool === 'frame');
+    this.cb.onToolChange?.(tool);
   }
   selectedItems() { return this.items.filter(i => this.selected.has(i.id)); }
 
@@ -70,6 +106,7 @@ export class Board {
   applyView() {
     const { x, y, scale } = this.view;
     this.world.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    this.world.style.setProperty('--inv', String(1 / scale)); // Rahmenlinien/Beschriftung gleich groß auf dem Bildschirm
     const g = 24 * scale;
     this.viewport.style.backgroundSize = `${g}px ${g}px`;
     this.viewport.style.backgroundPosition = `${x}px ${y}px`;
@@ -80,7 +117,7 @@ export class Board {
 
   render() {
     const alive = new Set();
-    for (const item of this.items) {
+    for (const item of drawOrder(this.items)) {
       alive.add(item.id);
       let node = this.nodes.get(item.id);
       if (!node) {
@@ -106,6 +143,14 @@ export class Board {
     node.style.top = `${item.y}px`;
     node.style.width = `${item.w}px`;
     node.style.height = `${item.h}px`;
+    if (item.type === 'frame') {
+      node.style.setProperty('--fc', frameHex(item.color));
+      let lbl = node.querySelector('.frame-label');
+      if (!lbl) { lbl = Object.assign(document.createElement('div'), { className: 'frame-label' }); node.appendChild(lbl); }
+      lbl.textContent = item.name || 'Rahmen';
+      lbl.classList.toggle('editing', this.renaming?.id === item.id);
+      return;
+    }
     const img = node.querySelector('img');
     if (img && item.type === 'image') this.layoutImg(item, img, item.x, item.y);
     if (this.cropId === item.id && this.ghost) this.layoutImg(item, this.ghost, 0, 0);
@@ -171,17 +216,96 @@ export class Board {
     o.replaceChildren();
     if (this.cropId) return this.renderCropOverlay();
     const sel = this.selectedItems();
-    if (!sel.length) return;
+    if (!sel.length) return this.placeRenameInput();
     const b = boundsOf(sel);
     const p1 = this.toScreen(b.x, b.y), p2 = this.toScreen(b.x + b.w, b.y + b.h);
     o.appendChild(box('sel-box', p1.x, p1.y, p2.x - p1.x, p2.y - p1.y));
     for (const [name, x, y] of [['nw', p1.x, p1.y], ['ne', p2.x, p1.y], ['sw', p1.x, p2.y], ['se', p2.x, p2.y]]) {
       o.appendChild(handle(`scale-${name}`, x, y, `handle corner ${name}`));
     }
-    const trash = uiButton('🗑', 'Vom Board entfernen (Entf) – die Datei bleibt erhalten', () => this.removeSelected());
+    // Auswahl-Leiste unter der Auswahl: Rahmen um Auswahl, Farben (bei Rahmen), Mülleimer
+    const bar = document.createElement('div');
+    bar.className = 'sel-bar overlay-ui';
+    bar.style.left = `${p1.x}px`; bar.style.top = `${p2.y + 10}px`;
+    const around = uiButton('▢ Rahmen um Auswahl', 'Rahmen um die Auswahl legen (Strg+G)', () => this.cb.onFrameAround?.());
+    around.classList.add('frame-around');
+    bar.appendChild(around);
+    if (sel.some(i => i.type === 'frame')) {
+      for (const c of FRAME_COLORS) {
+        const dot = uiButton('', `Farbe: ${c.label}`, () => this.setFrameColor(c.key));
+        dot.className = 'overlay-ui color-dot';
+        dot.dataset.color = c.key;
+        dot.style.setProperty('--dot', c.hex);
+        bar.appendChild(dot);
+      }
+    }
+    const trash = uiButton('🗑', 'Vom Board entfernen (Entf) – Dateien und Rahmeninhalt bleiben erhalten', () => this.removeSelected());
     trash.classList.add('trash');
-    trash.style.left = `${p2.x + 10}px`; trash.style.top = `${p1.y - 4}px`;
-    o.appendChild(trash);
+    bar.appendChild(trash);
+    o.appendChild(bar);
+    this.placeRenameInput();
+  }
+
+  // ---------- Rahmen ----------
+
+  setFrameColor(key) {
+    const frames = this.selectedItems().filter(i => i.type === 'frame');
+    if (!frames.length || frames.every(f => f.color === key)) return;
+    this.cb.onBeforeChange();
+    frames.forEach(f => { f.color = key; this.layoutNode(f); });
+    this.cb.onChange();
+  }
+
+  // Name bearbeiten: Eingabefeld über der Beschriftung (Enter = übernehmen, Esc = abbrechen).
+  startRename(id) {
+    const f = this.byId(id);
+    if (!f || f.type !== 'frame') return;
+    this.finishRename(true);
+    const input = document.createElement('input');
+    input.className = 'frame-rename overlay-ui';
+    input.value = f.name || '';
+    input.style.setProperty('--fc', frameHex(f.color));
+    this.renaming = { id, input };
+    let done = false;
+    const end = commit => { if (!done) { done = true; this.finishRename(commit); } };
+    input.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); end(true); }
+      if (e.key === 'Escape') { e.preventDefault(); end(false); }
+    });
+    input.addEventListener('blur', () => end(true));
+    input.addEventListener('pointerdown', e => e.stopPropagation());
+    this.layoutNode(f);
+    this.renderOverlay();
+    input.focus(); input.select();
+  }
+
+  finishRename(commit) {
+    const r = this.renaming;
+    if (!r) return;
+    this.renaming = null;
+    const f = this.byId(r.id);
+    const v = r.input.value.trim();
+    r.input.remove();
+    if (f && commit && v && v !== f.name) {
+      this.cb.onBeforeChange();
+      f.name = v;
+      this.cb.onChange();
+    }
+    if (f) this.layoutNode(f);
+    this.viewport.focus();
+  }
+
+  placeRenameInput() {
+    const r = this.renaming;
+    if (!r) return;
+    const f = this.byId(r.id);
+    if (!f) { this.renaming = null; return; }
+    const p = this.toScreen(f.x, f.y);
+    r.input.style.left = `${p.x}px`;
+    r.input.style.top = `${p.y - 30}px`;
+    // eigenes Element im Board (nicht im Overlay), damit Neuzeichnen das Eingabefeld nicht verliert
+    if (r.input.parentNode !== this.viewport) this.viewport.appendChild(r.input);
   }
 
   renderCropOverlay() {
@@ -290,23 +414,33 @@ export class Board {
         this.exitCrop();
         return;
       }
-      if (itemNode) return this.startMove(e, itemNode.dataset.id);
+      if (this.tool === 'frame') return this.startFrameDraw(e);
+      const label = e.target.closest('.frame-label');
+      if (label) return this.startMove(e, label.parentNode.dataset.id);
+      if (itemNode && !itemNode.classList.contains('frame')) return this.startMove(e, itemNode.dataset.id);
+      const edge = this.frameEdgeAt(this.pointerWorld(e));
+      if (edge) return this.startMove(e, edge.id);
       this.startMarquee(e);
     });
 
     // Ziel über die Position bestimmen (wegen Zeiger-Erfassung ist e.target hier das Board).
     vp.addEventListener('dblclick', e => {
-      if (this.cropId) return;
-      const hit = this.hitTest(this.pointerWorld(e));
-      if (hit) this.enterCrop(hit.id);
+      if (this.cropId || this.tool) return;
+      const p = this.pointerWorld(e);
+      const hit = this.hitTest(p);
+      if (hit) return this.enterCrop(hit.id);
+      const frame = this.frameLabelAt(e.clientX, e.clientY) || this.frameEdgeAt(p);
+      if (frame) this.startRename(frame.id);
     });
 
     window.addEventListener('keydown', e => {
       if (e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.querySelector('.modal:not([hidden])')) return;
       if (e.code === 'Space') { this.spaceDown = true; vp.classList.add('space'); e.preventDefault(); }
+      if (e.key === 'Escape' && this.tool) { e.preventDefault(); this.setTool(null); return; }
       if (e.key === 'Escape' || (e.key === 'Enter' && this.cropId)) { e.preventDefault(); this.exitCrop(); }
       if ((e.key === 'f' || e.key === 'F') && !this.cropId) this.fitAll();
+      if ((e.key === 'r' || e.key === 'R') && !this.cropId && !$app().hidden) this.setTool(this.tool === 'frame' ? null : 'frame');
       if ((e.key === 'Delete' || e.key === 'Backspace') && !this.cropId) this.removeSelected();
     });
     window.addEventListener('keyup', e => {
@@ -372,7 +506,10 @@ export class Board {
       return;
     }
     if (!this.selected.has(id)) this.setSelection([id]);
-    const start = this.selectedItems().map(i => ({ i, x: i.x, y: i.y }));
+    // Rahmen nehmen ihren Inhalt mit (Stand bei Beginn des Ziehens, auch verschachtelt).
+    const moving = new Set(this.selectedItems());
+    for (const f of this.selectedItems()) if (f.type === 'frame') frameContents(f, this.items).forEach(i => moving.add(i));
+    const start = [...moving].map(i => ({ i, x: i.x, y: i.y }));
     const sx = e.clientX, sy = e.clientY;
     let moved = false;
     this.drag(e, ev => {
@@ -401,7 +538,9 @@ export class Board {
       const w1 = screenToWorld(this.view, cx, cy);
       const area = { x: Math.min(w0.x, w1.x), y: Math.min(w0.y, w1.y), w: Math.abs(w1.x - w0.x), h: Math.abs(w1.y - w0.y) };
       const ids = new Set(base);
-      for (const it of this.items) if (intersects(area, it)) ids.add(it.id);
+      for (const it of this.items) {
+        if (it.type === 'frame' ? contains(area, it) : intersects(area, it)) ids.add(it.id);
+      }
       this.setSelection(ids);
       this.overlay.appendChild(rect);
     }, () => {
@@ -427,9 +566,23 @@ export class Board {
     const cy = corner.includes('n') ? b.y : b.y + b.h;
     const vx = cx - ax, vy = cy - ay, len2 = vx * vx + vy * vy;
     const start = sel.map(i => ({ x: i.x, y: i.y, w: i.w, h: i.h }));
+    const onlyFrames = sel.every(i => i.type === 'frame'); // Rahmen: Seitenverhältnis frei, Inhalt bleibt stehen
     this.cb.onBeforeChange();
     this.drag(e, ev => {
       const p = this.pointerWorld(ev);
+      if (onlyFrames) {
+        const minW = Math.min(...start.map(s => s.w)), minH = Math.min(...start.map(s => s.h));
+        const kx = Math.max(MIN_SIZE / minW, (p.x - ax) / vx);
+        const ky = Math.max(MIN_SIZE / minH, (p.y - ay) / vy);
+        sel.forEach((it, n) => {
+          const s0 = start[n];
+          it.x = ax + (s0.x - ax) * kx; it.y = ay + (s0.y - ay) * ky;
+          it.w = s0.w * kx; it.h = s0.h * ky;
+        });
+        sel.forEach(i => this.layoutNode(i));
+        this.renderOverlay();
+        return;
+      }
       const k = ((p.x - ax) * vx + (p.y - ay) * vy) / len2;
       scaleGroup(sel, start, ax, ay, k);
       sel.forEach(i => this.layoutNode(i));
@@ -507,6 +660,32 @@ export class Board {
     }, () => this.cb.onChange());
   }
 
+  // Rahmen aufziehen (Werkzeug „Rahmen“). Klick ohne Ziehen = Rahmen in Standardgröße.
+  startFrameDraw(e) {
+    const r = this.viewport.getBoundingClientRect();
+    const sx = e.clientX - r.left, sy = e.clientY - r.top;
+    const w0 = screenToWorld(this.view, sx, sy);
+    let rect = null, area = null;
+    this.drag(e, ev => {
+      const cx = ev.clientX - r.left, cy = ev.clientY - r.top;
+      if (!rect && Math.abs(cx - sx) + Math.abs(cy - sy) < 4) return;
+      if (!rect) { rect = document.createElement('div'); rect.className = 'frame-draft'; this.overlay.appendChild(rect); }
+      Object.assign(rect.style, {
+        left: `${Math.min(sx, cx)}px`, top: `${Math.min(sy, cy)}px`,
+        width: `${Math.abs(cx - sx)}px`, height: `${Math.abs(cy - sy)}px`,
+      });
+      const w1 = screenToWorld(this.view, cx, cy);
+      area = { x: Math.min(w0.x, w1.x), y: Math.min(w0.y, w1.y), w: Math.abs(w1.x - w0.x), h: Math.abs(w1.y - w0.y) };
+    }, () => {
+      rect?.remove();
+      this.setTool(null);
+      if (!area || area.w < MIN_SIZE || area.h < MIN_SIZE) {
+        area = { x: w0.x - FRAME_DEFAULT.w / 2, y: w0.y - FRAME_DEFAULT.h / 2, ...FRAME_DEFAULT };
+      }
+      this.cb.onCreateFrame?.(area);
+    });
+  }
+
   // Entfernt nur vom Board – nie die Datei (PFLICHTENHEFT 0.3).
   removeSelected() {
     if (!this.selected.size) return;
@@ -520,6 +699,8 @@ export class Board {
 }
 
 // ---------- kleine DOM-Hilfen ----------
+
+function $app() { return document.getElementById('app') || { hidden: false }; }
 
 function box(cls, x, y, w, h) {
   const d = document.createElement('div');

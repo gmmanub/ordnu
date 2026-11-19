@@ -597,6 +597,177 @@ def main():
               f"Projektordner: nur .ordnu/ von der App angelegt: {files_after}")
         page.screenshot(path=os.path.join(OUT, "07_sonnendeck.png"))
 
+        print("Rahmen")
+        ev("""const tab = M.createTab('Rahmentest'); d.tabs.push(tab); app.switchTab(tab.id);
+          B.view = { x: 0, y: 0, scale: 1 }; B.applyView();
+          await app.placeImage('alt_x.jpg', 100, 100, { centered: false });
+          await app.placeImage('neu_b.jpg', 700, 100, { centered: false });
+          await app.placeImage('neu_fokus.jpg', 100, 600, { centered: false });
+          B.setSelection([]); return true;""")
+        vpb = page.locator("#viewport").bounding_box()
+        def scr(wx, wy):
+            v = ev("return B.view;")
+            return vpb["x"] + v["x"] + wx * v["scale"], vpb["y"] + v["y"] + wy * v["scale"]
+        def items():
+            return ev("return app.state.data.items.filter(i => i.tab === app.state.data.activeTab).map(i => ({ ...i }));")
+        def frames():
+            return [i for i in items() if i["type"] == "frame"]
+        def by(path):
+            return [i for i in items() if i.get("path") == path][0]
+
+        # Anlegen per Ziehen (Knopf), danach gleich benennen
+        page.click("#btn-frame")
+        check(ev("return B.tool;") == "frame" and page.locator("#btn-frame.active").count() == 1, "Knopf „Rahmen“ aktiviert das Werkzeug")
+        x1, y1 = scr(60, 60); x2, y2 = scr(480, 400)
+        drag(x1, y1, x2, y2)
+        f = frames()
+        check(len(f) == 1 and abs(f[0]["x"] - 60) <= 1 and abs(f[0]["w"] - 420) <= 1 and abs(f[0]["h"] - 340) <= 1,
+              f"Rahmen aufgezogen: {[(r['x'], r['y'], r['w'], r['h']) for r in f]}")
+        check(ev("return B.tool;") is None, "Werkzeug danach wieder aus")
+        check(page.locator("input.frame-rename").count() == 1, "Nach dem Anlegen: Namensfeld offen")
+        page.fill("input.frame-rename", "Shot 010")
+        page.keyboard.press("Enter")
+        check(frames()[0]["name"] == "Shot 010" and page.locator("input.frame-rename").count() == 0, "Rahmen benannt (Enter)")
+        check(frames()[0]["rule"] is None and frames()[0]["color"] == "standard", "Leeres Regel-Feld + Standardfarbe")
+        order = page.eval_on_selector_all("#world > .item", "n => n.map(x => x.classList.contains('frame') ? 'F' : 'I')")
+        check(order[0] == "F" and "F" not in order[1:], f"Ebene: Rahmen hinter den Bildern: {order}")
+
+        # Taste R + Klick ohne Ziehen = Standardgröße; Esc behält Standardnamen
+        page.locator("#viewport").focus()
+        page.keyboard.press("r")
+        cx, cy = scr(1000, 650)
+        page.mouse.click(cx, cy)
+        page.keyboard.press("Escape")
+        fd = [r for r in frames() if r["name"] == "Rahmen"]
+        check(len(fd) == 1 and fd[0]["w"] == 480 and fd[0]["h"] == 320 and abs(fd[0]["x"] + 240 - 1000) <= 1,
+              "Taste R + Klick: Rahmen in Standardgröße um den Klickpunkt, Esc behält Namen")
+
+        # Rahmen um Auswahl (Strg+G)
+        bx, by_ = scr(860, 220)
+        page.mouse.click(bx, by_)
+        page.keyboard.press("Control+g")
+        page.keyboard.press("Escape")
+        b = by("neu_b.jpg")
+        fb = [r for r in frames() if r["x"] == b["x"] - 40 and r["y"] == b["y"] - 40]
+        check(len(fb) == 1 and fb[0]["w"] == b["w"] + 80 and fb[0]["h"] == b["h"] + 80, "Strg+G: Rahmen um Auswahl mit Rand")
+        fb_id = fb[0]["id"]
+        page.mouse.click(scr(1100, 450)[0], scr(1100, 450)[1])
+        page.click('#viewport')  # Fokus zurück
+        page.mouse.click(scr(860, 220)[0], scr(860, 220)[1])
+        page.click(".overlay .frame-around")
+        page.keyboard.press("Escape")
+        check(len(frames()) == 4, "Knopf „Rahmen um Auswahl“ in der Auswahl-Leiste")
+        ev("app.undo(); return true;")
+        check(len(frames()) == 3, "… rückgängig")
+
+        # Verschachtelt: kleiner Rahmen im Rahmen „Shot 010“
+        ev("app.addFrame({ x: 80, y: 80, w: 200, h: 150 }, { rename: false }); B.setSelection([]); return true;")
+        f010 = [r for r in frames() if r["name"] == "Shot 010"][0]
+        inner = [r for r in frames() if r["w"] == 200][0]
+        a0, c0, b0 = by("alt_x.jpg"), by("neu_fokus.jpg"), by("neu_b.jpg")
+        lx, ly = center(f'#world .item.frame[data-id="{f010["id"]}"] .frame-label')
+        drag(lx, ly, lx + 200, ly + 50)
+        f010b = [r for r in frames() if r["id"] == f010["id"]][0]
+        innerb = [r for r in frames() if r["id"] == inner["id"]][0]
+        a1, c1, b1 = by("alt_x.jpg"), by("neu_fokus.jpg"), by("neu_b.jpg")
+        check(round(f010b["x"] - f010["x"]) == 200 and round(f010b["y"] - f010["y"]) == 50, "Rahmen an der Beschriftung verschoben")
+        check(round(a1["x"] - a0["x"]) == 200 and round(innerb["x"] - inner["x"]) == 200, "Inhalt wandert mit (inkl. verschachteltem Rahmen)")
+        check(c1["x"] == c0["x"] and b1["x"] == b0["x"], "Elemente außerhalb bleiben stehen")
+        ev("app.undo(); return true;")
+        check(by("alt_x.jpg")["x"] == a0["x"] and [r for r in frames() if r["id"] == inner["id"]][0]["x"] == inner["x"]
+              and [r for r in frames() if r["id"] == f010["id"]][0]["x"] == f010["x"], "Verschieben mit Inhalt = ein Rückgängig-Schritt")
+        ev("app.redo(); app.undo(); return true;")
+
+        # Auswählen: Inneres frei, Rand wählt Rahmen
+        page.mouse.click(1350, 790)
+        ix, iy = scr(680, 360)   # im Rahmen um B, aber nicht auf B und nicht am Rand
+        page.mouse.click(ix, iy)
+        check(ev("return B.selected.size;") == 0, "Klick ins leere Rahmen-Innere wählt nichts (startet Auswahlrahmen)")
+        ex, ey = scr(661, 200)
+        page.mouse.click(ex, ey)
+        check(ev(f"return [...B.selected];") == [fb_id], "Klick auf den Rahmenrand wählt den Rahmen")
+        page.mouse.click(1350, 790)
+        drag(*scr(650, 50), *scr(1080, 400))
+        sel = set(ev("return [...B.selected];"))
+        check(fb_id in sel and b["id"] in sel, "Auswahlrahmen erfasst komplett umschlossenen Rahmen")
+        page.mouse.click(1350, 790)
+        drag(*scr(690, 90), *scr(900, 300))
+        sel = set(ev("return [...B.selected];"))
+        check(fb_id not in sel and b["id"] in sel, "Teilweise berührter Rahmen wird nicht erfasst")
+
+        # Skalieren: nur der Rahmen, Seitenverhältnis frei
+        page.mouse.click(1350, 790)
+        page.mouse.click(ex, ey)
+        f0 = [r for r in frames() if r["id"] == fb_id][0]
+        hx, hy = center(".handle.corner.se")
+        drag(hx, hy, hx + 100, hy + 30)
+        f1 = [r for r in frames() if r["id"] == fb_id][0]
+        check(round(f1["w"] - f0["w"]) == 100 and round(f1["h"] - f0["h"]) == 30 and f1["x"] == f0["x"], "Rahmen skaliert, Seitenverhältnis frei")
+        check(by("neu_b.jpg")["w"] == b["w"] and by("neu_b.jpg")["x"] == b["x"], "Inhalt bleibt beim Skalieren stehen")
+        page.keyboard.press("Control+z")
+        check([r for r in frames() if r["id"] == fb_id][0]["w"] == f0["w"], "Skalieren rückgängig")
+
+        # Farbe
+        page.click('.overlay .color-dot[data-color="blau"]')
+        col = page.eval_on_selector(f'#world .item.frame[data-id="{fb_id}"] .frame-label', "e => getComputedStyle(e).color")
+        check([r for r in frames() if r["id"] == fb_id][0]["color"] == "blau" and col == "rgb(111, 168, 220)",
+              f"Farbe geändert, Beschriftung in Rahmenfarbe: {col}")
+        page.keyboard.press("Control+z")
+        check([r for r in frames() if r["id"] == fb_id][0]["color"] == "standard", "Farbe rückgängig")
+        page.keyboard.press("Control+Shift+z")
+
+        # Umbenennen per Doppelklick auf die Beschriftung
+        lx, ly = center(f'#world .item.frame[data-id="{fb_id}"] .frame-label')
+        page.mouse.dblclick(lx, ly)
+        check(page.locator("input.frame-rename").count() == 1, "Doppelklick auf Beschriftung öffnet Namensfeld")
+        page.fill("input.frame-rename", "Varianten")
+        page.keyboard.press("Enter")
+        check([r for r in frames() if r["id"] == fb_id][0]["name"] == "Varianten", "Umbenannt")
+        page.mouse.dblclick(lx, ly)
+        page.fill("input.frame-rename", "Verworfen")
+        page.keyboard.press("Escape")
+        check([r for r in frames() if r["id"] == fb_id][0]["name"] == "Varianten", "Esc verwirft die Eingabe")
+        page.keyboard.press("Control+z")
+        check([r for r in frames() if r["id"] == fb_id][0]["name"] == "Rahmen", "Umbenennen rückgängig")
+        page.keyboard.press("Control+Shift+z")
+
+        # Löschen: nur der Rahmen, Inhalt bleibt
+        page.mouse.click(1350, 790)
+        page.mouse.click(ex, ey)
+        page.keyboard.press("Delete")
+        check(not [r for r in frames() if r["id"] == fb_id] and by("neu_b.jpg")["x"] == b["x"], "Rahmen gelöscht, Inhalt bleibt liegen")
+        page.keyboard.press("Control+z")
+        check(len([r for r in frames() if r["id"] == fb_id]) == 1, "Löschen rückgängig")
+
+        # Alles zeigen berücksichtigt Rahmen; Beschriftung bei kleinem Zoom lesbar
+        page.mouse.click(1350, 790)
+        page.keyboard.press("f")
+        fit = ev("""const r = document.getElementById('viewport').getBoundingClientRect();
+          return [...document.querySelectorAll('#world .item.frame')].every(n => { const b = n.getBoundingClientRect();
+            return b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1; });""")
+        check(fit, "F zeigt alle Rahmen")
+        page.screenshot(path=os.path.join(OUT, "08_rahmen.png"))
+        ev("B.view = { x: 300, y: 200, scale: 0.2 }; B.applyView(); return true;")
+        hgt = ev("return document.querySelector('#world .item.frame .frame-label').getBoundingClientRect().height;")
+        check(12 <= hgt <= 24, f"Beschriftung bei 20 % Zoom lesbar (Höhe {hgt:.1f} px)")
+        page.screenshot(path=os.path.join(OUT, "09_rahmen_klein.png"))
+
+        # Alles rückgängig / wiederholen
+        cnt = ev("""let n = 0; while (app.undo()) n++; const empty = app.state.data.items.filter(i => i.tab === app.state.data.activeTab).length;
+          let m = 0; while (app.redo()) m++; app.undo(); return { n, m, empty };""")
+        # +1: das zuvor rückgängig gemachte Löschen liegt noch im Wiederholen-Stapel
+        check(cnt["m"] == cnt["n"] + 1 and cnt["empty"] == 0 and len(frames()) == 4, f"Jeder Schritt rückgängig/wiederholbar: {cnt}")
+
+        # Speichern und neu laden
+        rl = ev("""await app.flushAll(); await app.openProject('Projekt Sonnendeck');
+          const d2 = app.state.data; const t = d2.tabs.find(x => x.name === 'Rahmentest'); app.switchTab(t.id);
+          return d2.items.filter(i => i.tab === t.id && i.type === 'frame').map(f => ({ name: f.name, color: f.color, rule: f.rule })).sort((a, b) => a.name.localeCompare(b.name));""")
+        check(len(rl) == 4 and {r["name"] for r in rl} == {"Shot 010", "Varianten", "Rahmen"} and all(r["rule"] is None for r in rl),
+              f"Rahmen gespeichert und neu geladen: {rl}")
+        check(page.locator("#world .item.frame").count() == 4, "Rahmen nach Neuladen angezeigt")
+        oldf = ev("return M.normalizeData({ version: 1, tabs: [{ id: 't', name: 'Alt' }], activeTab: 't', items: [{ id: 'f', tab: 't', type: 'frame', x: 0, y: 0, w: 100, h: 80 }] }).items[0];")
+        check(oldf["name"] == "Rahmen" and oldf["color"] == "standard" and oldf["rule"] is None, "Unvollständige Rahmen-Daten werden ergänzt")
+
         print("Sicherheitssperre (eigenes Fenster, Sperre aktiv)")
         ctx_csp = browser.new_context()
         page = ctx_csp.new_page()

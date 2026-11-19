@@ -47,10 +47,13 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
   .ordnu/
     ordnu.json          Boards, Positionen, Rahmen, Notizen, Tags
     ordnu.backup.json   Kopie des Stands beim Öffnen des Projekts
+    verlauf.json        Rückgängig-Verlauf je Tab (nur Unterschiede, 3 s nach Änderung gespeichert)
     vorschau/           Vorschaubilder (von der App erzeugt)
 ```
 - Speichern automatisch, 1 s nach der letzten Änderung. Die Datei wird erst ersetzt, wenn sie vollständig geschrieben ist (kein Halb-Stand bei Absturz).
 - `ordnu.json` hat eine `version`-Nummer (aktuell 1) für spätere Umstellungen.
+- Bild-Elemente: `x, y, w, h` = sichtbarer Ausschnitt auf dem Board, `ar` = Seitenverhältnis des Originals, `crop = { ox, oy, scale, rot }` = Lage des Bildes im Ausschnitt (relativ zur Ausschnitt-Breite; Drehung in Grad). Ältere Elemente ohne `crop` werden automatisch ergänzt.
+- `verlauf.json` fehlt oder ist defekt → leerer Verlauf, die App läuft normal weiter.
 - Bilder werden über ihren **relativen Pfad** im Projekt erkannt. Umbenennen/Verschieben außerhalb der App trennt die Verbindung (Bild erscheint als „fehlt“). Wiederfinden umbenannter Dateien: später (siehe Roadmap).
 
 ### 1.3 Vorschaubilder
@@ -68,19 +71,23 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 
 ### V1 (freigegeben 19.11.2026)
 - Projekte (Auswahlliste aus dem Hauptordner)
-- Benennbare Board-Tabs pro Projekt (anlegen, umbenennen, löschen, Reihenfolge)
+- Benennbare Board-Tabs pro Projekt (anlegen, umbenennen, löschen mit Rückfrage + 8 s „Rückgängig“, Reihenfolge per Ziehen; letzter Tab nicht löschbar)
 - Unendliche Fläche: Verschieben, Zoomen (zum Mauszeiger hin)
-- Bilder platzieren, verschieben, skalieren (Seitenverhältnis bleibt)
+- Bilder platzieren, verschieben, skalieren (Eck-Anfasser, Seitenverhältnis bleibt, Gruppe skaliert gemeinsam, Mindestkante 20)
+- Auswahl: Klick, Umschalt+Klick, Auswahlrahmen (Umschalt = hinzufügen)
+- Vom Board entfernen: `Entf` oder Mülleimer an der Auswahl (Originale werden nie angefasst)
+- Ausschnitt / Bildtransform (nicht-destruktiv): Doppelklick aufs Bild; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
 - Rahmen: Farbe, Name; Inhalt wandert beim Verschieben mit
 - Notizzettel / Text
 - Tags tippen: Datum (automatisch aus Datei, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
 - Filter nach Tags
-- Rückgängig/Wiederholen (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y). 200 Schritte, gilt für Inhalt (Bilder, Rahmen, Notizen, Tags, Tabs), nicht für Zoom/Ansicht. Verlauf nur für die laufende Sitzung (nicht in ordnu.json).
+- Rückgängig/Wiederholen PRO TAB (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y), wirkt nur im aktiven Tab. 200 Schritte je Tab, gilt für Inhalt (Bilder, Ausschnitt, später Rahmen, Notizen, Tags), nicht für Zoom/Ansicht. Tab umbenennen/sortieren/löschen nicht per Strg+Z (Löschen: „Rückgängig“-Hinweis). Verlauf bleibt über Tab-Wechsel und Schließen der App erhalten (`.ordnu/verlauf.json`). Tags hängen am Bild und gelten in allen Tabs; eine Tag-Änderung wird je Feld in dem Tab rückgängig gemacht, in dem sie gemacht wurde – wurde das Feld inzwischen in einem anderen Tab geändert, bleibt die spätere Änderung stehen (mit Hinweis).
 
 #### Bau-Reihenfolge V1
 1. Grundgerüst: Ordnerzugriff, Projektliste, `.ordnu/`, Speichern, Tabs, Fläche (Verschieben/Zoomen), Bilderliste mit Vorschauen, Bilder aufs Board legen und verschieben – fertig 19.11.
 1b. Rückgängig/Wiederholen – fertig 19.11.
-2. Bilder skalieren, Mehrfachauswahl, Löschen vom Board
+2. Bilder skalieren, Auswahlrahmen, Mülleimer, Tabs löschen/sortieren, Rückgängig pro Tab mit verlauf.json – fertig 19.11.
+2b. Ausschnitt / Bildtransform – fertig 19.11.
 3. Rahmen
 4. Notizzettel / Text
 5. Tags (Einzel + Mehrfach, Vorschläge, Datum aus Datei)
@@ -119,9 +126,12 @@ Zeichnen, Formen-Bibliothek, Vorlagen, Zusammenarbeit.
 | Zoomen | Mausrad (zum Mauszeiger hin), Touchpad-Pinch |
 | Zoom-Grenzen | 5 % – 800 % |
 | Alles zeigen | Taste `F` |
-| Auswahl | Klick, Umschalt+Klick, Rahmen aufziehen auf leerer Fläche |
-| Löschen vom Board | `Entf` – entfernt nur vom Board, nie die Datei |
-| Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z (oder Strg+Y) |
+| Auswahl | Klick, Umschalt+Klick, Auswahlrahmen auf leerer Fläche ziehen (Umschalt = hinzufügen) |
+| Skalieren | Eck-Anfasser der Auswahl ziehen |
+| Löschen vom Board | `Entf` oder Mülleimer – entfernt nur vom Board, nie die Datei |
+| Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z (oder Strg+Y) – nur im aktiven Tab |
+| Ausschnitt | Doppelklick aufs Bild; Kanten ziehen = Ausschnitt, im Bild ziehen = verschieben, runde gelbe Anfasser = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), Esc/Klick daneben = fertig |
+| Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen (mit Rückfrage) |
 
 ---
 

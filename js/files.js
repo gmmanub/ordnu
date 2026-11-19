@@ -173,3 +173,21 @@ export async function getThumbnail(appDir, img) {
 
   return { url: URL.createObjectURL(blob), width, height };
 }
+
+// ---------- Verlauf (.ordnu/verlauf.json) ----------
+
+export const HISTORY_FILE = 'verlauf.json';
+
+// Fehlende oder defekte Datei → null (leerer Verlauf), nie ein Fehler.
+export async function loadHistoryRaw(appDir) {
+  try {
+    const text = await readText(appDir, HISTORY_FILE);
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveHistoryRaw(appDir, obj) {
+  await writeText(appDir, HISTORY_FILE, JSON.stringify(obj));
+}

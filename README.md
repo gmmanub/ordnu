@@ -17,12 +17,14 @@ App: https://gmmanub.github.io/ordnu/
 | Fläche verschieben | Leertaste + Ziehen, mittlere oder rechte Maustaste |
 | Zoomen | Mausrad / Touchpad-Pinch |
 | Alles zeigen | `F` |
-| Mehrere auswählen | Umschalt + Klick |
-| Vom Board entfernen | `Entf` (die Datei bleibt erhalten) |
-| Rückgängig / Wiederholen | `Strg+Z` / `Strg+Umschalt+Z` |
-| Tab umbenennen | Doppelklick auf den Tab |
+| Mehrere auswählen | Umschalt + Klick oder Rahmen auf leerer Fläche aufziehen |
+| Skalieren | Ecken der Auswahl ziehen |
+| Vom Board entfernen | `Entf` oder Mülleimer (die Datei bleibt erhalten) |
+| Rückgängig / Wiederholen | `Strg+Z` / `Strg+Umschalt+Z` – je Tab, bleibt auch nach dem Schließen erhalten |
+| Ausschnitt / Bildtransform | Doppelklick aufs Bild: Kanten ziehen, Bild verschieben, gelbe Punkte = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), `Esc` = fertig |
+| Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen |
 
-Gespeichert wird automatisch in `<Projekt>/.ordnu/` (Boards, Tags, Vorschaubilder).
+Gespeichert wird automatisch in `<Projekt>/.ordnu/` (Boards, Tags, Vorschaubilder, Verlauf).
 Die eigenen Bilder werden nie verändert, verschoben oder gelöscht.
 
 ## Sicherheit

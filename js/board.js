@@ -4,8 +4,9 @@ import {
   zoomAt, screenToWorld, fitView, boundsOf, intersects, scaleGroup,
   imageRect, setImageRect, setWindow, resetCrop, rotate, normalizeAngle, MIN_SIZE,
   FRAME_COLORS, FRAME_DEFAULT, frameHex, frameContents, drawOrder, contains,
-  NOTE_COLORS, TEXT_COLORS, FONT_SIZES, colorHex, ZOOM_MAX,
+  NOTE_COLORS, TEXT_COLORS, FONT_SIZES, colorHex, ZOOM_MAX, DEFAULT_IMAGE_WIDTH,
 } from './model.js';
+import { createDynamics, wheelFactor, snapPivot, snapRadius, boxSnapPoints, SESSION_END_MS } from './scaling.js';
 
 const ROT_HANDLE_PX = 34;  // Abstand des Dreh-Anfassers über dem Bild (Bildschirm-Pixel)
 const SNAP_DEG = 15;       // Umschalt beim Drehen
@@ -19,7 +20,12 @@ export class Board {
     this.viewport = viewport;
     this.world = world;
     this.overlay = overlay;             // Anfasser, Auswahlrahmen (Bildschirm-Koordinaten)
-    this.cb = cb;                       // onBeforeChange, onChange, onRemove, onViewChange, onDropImage, getImageUrl
+    // onBeforeChange, onChange, onRemove, onViewChange, onDropImage, getImageUrl, getImageSize, onOpenViewer, onNotice …
+    // Jede neue Änderung beendet zuerst einen laufenden Alt-Rad-Vorgang (eigener Rückgängig-Schritt).
+    this.cb = { ...cb, onBeforeChange: () => { this.endAltScale(); cb.onBeforeChange(); } };
+    this.rawBefore = cb.onBeforeChange;
+    this.altScale = null;               // laufender Alt-Rad-Vorgang
+    this.dyn = createDynamics();
     this.view = { x: 0, y: 0, scale: 1 };
     this.items = [];
     this.selected = new Set();
@@ -35,6 +41,7 @@ export class Board {
   }
 
   setContent(items, view) {
+    this.endAltScale();
     this.cropId = null;
     this.renaming = null;
     this.editing?.ta.remove();
@@ -52,6 +59,7 @@ export class Board {
 
   // Inhalt ersetzen, Ansicht und (soweit noch vorhanden) Auswahl behalten – z. B. nach Rückgängig.
   replaceItems(items) {
+    this.dropAltScale();
     this.items = items;
     const ids = new Set(items.map(i => i.id));
     this.selected = new Set([...this.selected].filter(id => ids.has(id)));
@@ -407,6 +415,18 @@ export class Board {
       }
     }
     if (sel.some(isNote)) bar.appendChild(this.noteControls(sel));
+    if (sel.some(i => i.type === 'image')) {
+      const std = uiButton('Standardgröße', 'Bild auf Platziergröße zurücksetzen (Mitte bleibt)', () => this.resetImageSize('standard'));
+      std.dataset.ui = 'size-standard';
+      const px = uiButton('Pixelgröße', 'Bild auf echte Pixelgröße: 1 Pixel = 1 Board-Einheit (bei 100 % Zoom)', () => this.resetImageSize('pixel'));
+      px.dataset.ui = 'size-pixel';
+      bar.append(std, px);
+    }
+    if (sel.some(i => i.type === 'frame' && i.scaleMem)) {
+      const rs = uiButton('Skalierung zurücksetzen', 'Alt-Skalierung dieses Rahmens samt damaligem Inhalt zurücknehmen', () => this.resetFrameScale());
+      rs.dataset.ui = 'frame-scale-reset';
+      bar.appendChild(rs);
+    }
     const trash = uiButton('🗑', 'Vom Board entfernen (Entf) – Dateien und Rahmeninhalt bleiben erhalten', () => this.removeSelected());
     trash.classList.add('trash');
     bar.appendChild(trash);
@@ -593,6 +613,7 @@ export class Board {
     vp.addEventListener('wheel', e => {
       e.preventDefault();
       this.stopAnim();
+      if (e.altKey && !e.ctrlKey) return this.altWheel(e); // Alt + Rad = Auswahl skalieren
       const r = vp.getBoundingClientRect();
       const speed = e.ctrlKey ? 0.01 : 0.0015; // ctrlKey = Touchpad-Pinch
       this.view = zoomAt(this.view, Math.exp(-e.deltaY * speed), e.clientX - r.left, e.clientY - r.top);
@@ -604,6 +625,7 @@ export class Board {
 
     vp.addEventListener('pointerdown', e => {
       if (e.target.closest('textarea.note-edit')) return; // Text markieren im Textfeld
+      this.endAltScale();
       this.stopAnim();
       if (!e.target.closest('input, textarea')) vp.focus();
       const wantsPan = e.button === 1 || e.button === 2 || (e.button === 0 && this.spaceDown);
@@ -639,14 +661,15 @@ export class Board {
       const p = this.pointerWorld(e);
       const hit = this.hitTest(p);
       if (hit && isNote(hit)) return this.startEdit(hit.id);
-      if (hit) return this.enterCrop(hit.id);
+      if (hit && e.altKey) return this.enterCrop(hit.id);        // Alt + Doppelklick = Bildtransform
+      if (hit) return this.cb.onOpenViewer?.(hit.id);            // Doppelklick = Bildansicht
       const frame = this.frameLabelAt(e.clientX, e.clientY) || this.frameEdgeAt(p);
       if (frame) this.startRename(frame.id);
     });
 
     window.addEventListener('keydown', e => {
       if (e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (document.querySelector('.modal:not([hidden])')) return;
+      if (document.querySelector('.modal:not([hidden]), .viewer:not([hidden])')) return;
       if (e.code === 'Space') { this.spaceDown = true; vp.classList.add('space'); e.preventDefault(); }
       if (e.key === 'Escape' && this.tool) { e.preventDefault(); this.setTool(null); return; }
       if (e.key === 'Escape' || (e.key === 'Enter' && this.cropId)) { e.preventDefault(); this.exitCrop(); }
@@ -665,6 +688,10 @@ export class Board {
     window.addEventListener('keyup', e => {
       if (e.code === 'Space') { this.spaceDown = false; vp.classList.remove('space'); }
     });
+    // Alt allein soll in Chrome nicht das Browser-Menü fokussieren (Alt + Rad / Alt + Ziehen).
+    for (const type of ['keydown', 'keyup']) {
+      window.addEventListener(type, e => { if (e.key === 'Alt' && !$app().hidden) e.preventDefault(); });
+    }
 
     vp.addEventListener('dragover', e => {
       const types = e.dataTransfer.types;
@@ -777,6 +804,7 @@ export class Board {
 
   // Gruppe an einer Ecke skalieren; Anker = gegenüberliegende Ecke.
   startScale(e, corner) {
+    if (e.altKey && this.selectedItems().some(i => i.type === 'frame')) return this.startScaleWithContent(e, corner);
     const sel = this.selectedItems();
     const b = boundsOf(sel);
     const ax = corner.includes('w') ? b.x + b.w : b.x;
@@ -908,6 +936,236 @@ export class Board {
       }
       this.cb.onCreateFrame?.(area);
     });
+  }
+
+  // ---------- Alt-Skalieren (Rad und Anfasser), Reset ----------
+
+  // Was beim Alt-Skalieren mitgeht: Auswahl + Inhalt ausgewählter Rahmen (Stand bei Beginn).
+  scaleTargets(sel) {
+    const all = new Set(sel);
+    const frames = [];
+    for (const f of sel.filter(i => i.type === 'frame')) {
+      const content = frameContents(f, this.items);
+      content.forEach(i => all.add(i));
+      frames.push({ frame: f, ids: content.map(i => i.id) });
+    }
+    return { items: [...all], frames };
+  }
+
+  // Elemente um Punkt (px, py) mit Faktor k skalieren (Schrift wächst mit). Rückgabe: tatsächlicher Faktor.
+  scaleItemsAround(items, k, px, py) {
+    const minEdge = Math.min(...items.map(i => Math.min(i.w, i.h)));
+    k = Math.max(k, MIN_SIZE / minEdge);
+    for (const it of items) {
+      it.x = px + (it.x - px) * k; it.y = py + (it.y - py) * k;
+      it.w *= k; it.h *= k;
+      if (isNote(it)) it.fontSize = Math.round(it.fontSize * k * 10) / 10;
+    }
+    return k;
+  }
+
+  // Alt + Rad: Auswahl (bzw. im Bildtransform das Bild im Ausschnitt) um den Mauszeiger skalieren.
+  // Fangbereiche an Ecken und Mitte. Ein zusammenhängendes Drehen = ein Rückgängig-Schritt.
+  altWheel(e) {
+    const r = this.viewport.getBoundingClientRect();
+    const pointer = { x: e.clientX - r.left, y: e.clientY - r.top };
+    let points, wPx, hPx, item = null, sel = null;
+    if (this.cropId) {
+      item = this.byId(this.cropId);
+      if (!item) return;
+      const ir = imageRect(item);
+      points = [[-1, -1, 'nw'], [1, -1, 'ne'], [1, 1, 'se'], [-1, 1, 'sw'], [0, 0, 'c']].map(([sx, sy, key]) => {
+        const d = rotate(sx * ir.w / 2, sy * ir.h / 2, ir.rot);
+        return { key, ...this.toScreen(ir.cx + d.x, ir.cy + d.y) };
+      });
+      wPx = ir.w * this.view.scale; hPx = ir.h * this.view.scale;
+    } else {
+      sel = this.selectedItems();
+      if (!sel.length || sel.every(isNote)) return; // Zettel/Text allein: nicht per Alt + Rad
+      const b = boundsOf(sel);
+      const p1 = this.toScreen(b.x, b.y);
+      wPx = b.w * this.view.scale; hPx = b.h * this.view.scale;
+      points = boxSnapPoints(p1.x, p1.y, wPx, hPx);
+    }
+    const f = wheelFactor(this.dyn, e);
+    if (!Number.isFinite(f) || f === 1) return;
+    const pivot = snapPivot(points, pointer, snapRadius(wPx, hPx));
+    const pw = screenToWorld(this.view, pivot.x, pivot.y);
+
+    if (!this.altScale) {
+      this.rawBefore();
+      this.altScale = item
+        ? { crop: item.id, k: 1, items: [item], frames: [] }
+        : { crop: null, k: 1, ...this.scaleTargets(sel) };
+    }
+    const s = this.altScale;
+    if (s.crop) {
+      const ir = imageRect(item);
+      const k = Math.max(f, MIN_SIZE / Math.min(ir.w, ir.h));
+      setImageRect(item, { ...ir, cx: pw.x + (ir.cx - pw.x) * k, cy: pw.y + (ir.cy - pw.y) * k, w: ir.w * k, h: ir.h * k });
+      s.k *= k;
+    } else {
+      s.k *= this.scaleItemsAround(s.items, f, pw.x, pw.y);
+    }
+    s.items.forEach(i => this.layoutNode(i));
+    this.refreshSources();
+    this.renderOverlay();
+    this.showPivot(pivot, s.k);
+    clearTimeout(s.timer);
+    s.timer = setTimeout(() => this.endAltScale(), SESSION_END_MS);
+  }
+
+  // Fadenkreuz am Skalierzentrum (eingerastet hervorgehoben) + Prozentanzeige.
+  showPivot(pivot, k) {
+    const cross = document.createElement('div');
+    cross.className = 'pivot' + (pivot.snap ? ' snapped' : '');
+    cross.dataset.snap = pivot.snap || '';
+    cross.style.left = `${pivot.x}px`; cross.style.top = `${pivot.y}px`;
+    const pct = document.createElement('div');
+    pct.className = 'scale-pct';
+    pct.textContent = `${Math.round(k * 100)} %`;
+    pct.style.left = `${pivot.x + 14}px`; pct.style.top = `${pivot.y + 14}px`;
+    this.overlay.append(cross, pct);
+  }
+
+  // Alt-Rad-Vorgang abschließen: Rahmen merken sich die Skalierung (für „Skalierung zurücksetzen“).
+  endAltScale() {
+    const s = this.altScale;
+    if (!s) return;
+    this.altScale = null;
+    clearTimeout(s.timer);
+    if (!s.crop) this.rememberFrameScale(s.frames, s.k);
+    s.items.filter(i => i.type === 'text').forEach(i => this.autosize(i));
+    this.renderOverlay();
+    this.cb.onChange();
+  }
+
+  // Vorgang verwerfen ohne Abschluss (z. B. wenn Rückgängig den Inhalt ersetzt).
+  dropAltScale() {
+    if (!this.altScale) return;
+    clearTimeout(this.altScale.timer);
+    this.altScale = null;
+  }
+
+  rememberFrameScale(frames, k) {
+    if (Math.abs(k - 1) < 1e-9) return;
+    for (const { frame, ids } of frames) {
+      const mem = frame.scaleMem || { k: 1, items: {} };
+      mem.k *= k;
+      for (const id of ids) mem.items[id] = (mem.items[id] || 1) * k;
+      frame.scaleMem = mem;
+    }
+  }
+
+  // Alt + Ecke am Rahmen ziehen: Rahmen + Inhalt proportional skalieren (Anker = gegenüberliegende Ecke).
+  startScaleWithContent(e, corner) {
+    const sel = this.selectedItems();
+    const { items, frames } = this.scaleTargets(sel);
+    const b = boundsOf(sel);
+    const ax = corner.includes('w') ? b.x + b.w : b.x;
+    const ay = corner.includes('n') ? b.y + b.h : b.y;
+    const vx = (corner.includes('w') ? b.x : b.x + b.w) - ax, vy = (corner.includes('n') ? b.y : b.y + b.h) - ay;
+    const len2 = vx * vx + vy * vy;
+    const start = items.map(i => ({ x: i.x, y: i.y, w: i.w, h: i.h, fs: i.fontSize }));
+    let k = 1;
+    this.cb.onBeforeChange();
+    this.drag(e, ev => {
+      const p = this.pointerWorld(ev);
+      k = scaleGroup(items, start, ax, ay, ((p.x - ax) * vx + (p.y - ay) * vy) / len2);
+      items.forEach((it, n) => { if (isNote(it)) it.fontSize = Math.round(start[n].fs * k * 10) / 10; });
+      items.forEach(i => this.layoutNode(i));
+      this.refreshSources();
+      this.renderOverlay();
+    }, () => {
+      this.rememberFrameScale(frames, k);
+      items.filter(i => i.type === 'text').forEach(i => this.autosize(i));
+      this.renderOverlay();
+      this.cb.onChange();
+    });
+  }
+
+  // „Skalierung zurücksetzen“: nimmt die Alt-Skalierung von Rahmen und NUR den damals mitskalierten
+  // Elementen zurück – um den aktuellen Rahmen-Mittelpunkt. Spätere Verschiebungen bleiben (relativ
+  // zum Rahmen zurückskaliert), neu hinzugekommener Inhalt bleibt unverändert.
+  resetFrameScale() {
+    const frames = this.selectedItems().filter(i => i.type === 'frame' && i.scaleMem);
+    if (!frames.length) return;
+    this.cb.onBeforeChange();
+    const touched = new Set();
+    for (const f of frames) {
+      const { k, items } = f.scaleMem;
+      const fcx = f.x + f.w / 2, fcy = f.y + f.h / 2;
+      for (const [id, kE] of Object.entries(items)) {
+        const it = this.byId(id);
+        if (!it || !(kE > 0)) continue;
+        const cx = fcx + (it.x + it.w / 2 - fcx) / kE, cy = fcy + (it.y + it.h / 2 - fcy) / kE;
+        it.w /= kE; it.h /= kE;
+        it.x = cx - it.w / 2; it.y = cy - it.h / 2;
+        if (isNote(it)) it.fontSize = Math.round(it.fontSize / kE * 10) / 10;
+        touched.add(it);
+      }
+      f.w /= k; f.h /= k;
+      f.x = fcx - f.w / 2; f.y = fcy - f.h / 2;
+      f.scaleMem = null;
+      touched.add(f);
+    }
+    touched.forEach(i => { this.layoutNode(i); if (i.type === 'text') this.autosize(i); });
+    this.refreshSources();
+    this.renderOverlay();
+    this.cb.onChange();
+  }
+
+  // Bild-Reset: 'standard' = Platziergröße (Breite 320), 'pixel' = 1 Board-Einheit pro Originalpixel.
+  // Seitenverhältnis des Ausschnitts und Mitte bleiben.
+  resetImageSize(mode) {
+    const imgs = this.selectedItems().filter(i => i.type === 'image');
+    const plan = [];
+    let missing = 0;
+    for (const it of imgs) {
+      let k;
+      if (mode === 'pixel') {
+        const size = this.cb.getImageSize?.(it.path);
+        if (!size?.width) { missing++; continue; }
+        k = size.width / (imageRect(it).w);
+      } else {
+        k = DEFAULT_IMAGE_WIDTH / it.w;
+      }
+      if (Math.abs(k - 1) > 1e-9) plan.push([it, k]);
+    }
+    if (missing) this.cb.onNotice?.(`${missing} Bild(er): Originalgröße noch unbekannt – Vorschau wird noch erzeugt.`);
+    if (!plan.length) return;
+    this.cb.onBeforeChange();
+    for (const [it, k] of plan) {
+      const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+      it.w *= k; it.h *= k;
+      it.x = cx - it.w / 2; it.y = cy - it.h / 2;
+      this.layoutNode(it);
+    }
+    this.refreshSources();
+    this.renderOverlay();
+    this.cb.onChange();
+  }
+
+  // Nächstes Bild auf dem Board in einer Richtung ('left','right','up','down') – für die Bildansicht.
+  // Bevorzugt im Kegel ±45°, sonst in der Halbebene; am Rand: null.
+  neighbor(id, dir) {
+    const cur = this.byId(id);
+    if (!cur) return null;
+    const c = { x: cur.x + cur.w / 2, y: cur.y + cur.h / 2 };
+    const axis = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[dir];
+    if (!axis) return null;
+    let bestCone = null, bestHalf = null;
+    for (const it of this.items) {
+      if (it.type !== 'image' || it.id === id) continue;
+      const dx = it.x + it.w / 2 - c.x, dy = it.y + it.h / 2 - c.y;
+      const along = dx * axis[0] + dy * axis[1];
+      const across = Math.abs(dx * axis[1] - dy * axis[0]);
+      if (along <= 1e-6) continue;
+      const score = along + 2 * across;
+      if (across <= along) { if (!bestCone || score < bestCone.score) bestCone = { id: it.id, score }; }
+      else if (!bestHalf || score < bestHalf.score) bestHalf = { id: it.id, score };
+    }
+    return (bestCone || bestHalf)?.id ?? null;
   }
 
   // Entfernt nur vom Board – nie die Datei (PFLICHTENHEFT 0.3).

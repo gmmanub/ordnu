@@ -78,6 +78,20 @@
 
   <div id="toast" class="toast" hidden></div>
 
+  <!-- Bildansicht (Doppelklick auf ein Bild) -->
+  <div id="viewer" class="viewer" hidden tabindex="-1" role="dialog" aria-label="Bildansicht">
+    <div class="viewer-stage"><img class="viewer-img" alt="" draggable="false"><div class="viewer-msg" hidden></div></div>
+    <aside class="viewer-side" hidden><!-- V2: Versionshistorie / Vergleich --></aside>
+    <button class="viewer-close" title="Schließen (Esc)">×</button>
+    <div class="viewer-bar">
+      <span class="viewer-name"></span>
+      <span class="viewer-date muted"></span>
+      <span class="spacer"></span>
+      <span class="muted small viewer-hint">Rad: zoomen · Ziehen: verschieben · Pfeiltasten: nächstes Bild</span>
+      <button class="viewer-zoom" title="Umschalten: 100 % / Bildschirm füllen"></button>
+    </div>
+  </div>
+
   <!-- Rückfrage in der App (keine Browser-Dialoge) -->
   <div id="modal" class="modal" hidden>
     <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">

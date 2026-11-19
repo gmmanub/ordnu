@@ -1,7 +1,7 @@
 // Service Worker: cacht ausschließlich den App-Code, damit ordnu offline startet.
 // Keine Bilder, keine Projektdaten (PFLICHTENHEFT 1). Bei jeder Code-Änderung VERSION erhöhen.
 
-const VERSION = 'ordnu-v1-006';
+const VERSION = 'ordnu-v1-007';
 const APP_FILES = [
   './',
   './index.html',
@@ -11,6 +11,8 @@ const APP_FILES = [
   './js/files.js',
   './js/history.js',
   './js/model.js',
+  './js/scaling.js',
+  './js/viewer.js',
   './manifest.webmanifest',
   './icons/icon.svg',
 ];

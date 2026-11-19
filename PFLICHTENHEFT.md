@@ -89,9 +89,19 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Auswahl: Klick, Umschalt+Klick, Auswahlrahmen (Umschalt = hinzufügen)
 - Vom Board entfernen: `Entf` oder Mülleimer an der Auswahl (Originale werden nie angefasst)
 - Neue Dateien erkennen + „Neu“-Markierung + Filter „Nur neue“; Ordner/Dateien aus dem Projekt aufs Board ziehen; Eingangsdatum, Tagessortierung, Korrekturvorschlag (siehe 1.1 und 1.5) – freigegeben 19.11.
-- Ausschnitt / Bildtransform (nicht-destruktiv): Doppelklick aufs Bild; Enter/Esc/„Fertig“ beendet; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
+- Ausschnitt / Bildtransform (nicht-destruktiv): Alt + Doppelklick aufs Bild (seit 4b; vorher Doppelklick); Enter/Esc/„Fertig“ beendet; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
 - Rahmen (fertig 19.11.): aufziehen (Knopf „Rahmen“ / Taste R; Klick ohne Ziehen = 480×320) oder „Rahmen um Auswahl“ (Knopf in der Auswahl-Leiste / Strg+G, 40 Rand). Farbiger Rand + leicht transparente Füllung, Palette mit 8 Farben + Standard (Ocker, Blau, Salbei, Rost, Lavendel, Petrol, Rosé, Schiefer). Name als Beschriftung oben links in Rahmenfarbe, nach dem Anlegen gleich bearbeitbar, sonst Doppelklick auf Beschriftung/Rand (Enter/Esc); Beschriftung und Linie bleiben auf dem Bildschirm gleich groß (bei kleinem Zoom lesbar). Rahmen liegen immer hinter Bildern (große hinter kleinen). Klick auf Beschriftung oder Rand wählt den Rahmen, Klick ins leere Innere startet den Auswahlrahmen; der Auswahlrahmen erfasst Rahmen nur, wenn sie komplett umschlossen sind. Verschieben nimmt den Inhalt mit (Elemente, deren Mittelpunkt bei Beginn im Rahmen liegt; andere Rahmen nur, wenn komplett darin – verschachtelt). Skalieren per Anfasser: nur der Rahmen, Seitenverhältnis frei, Inhalt bleibt stehen. Farbe per Farbpunkten in der Auswahl-Leiste (auch mehrere). Löschen entfernt nur den Rahmen, der Inhalt bleibt. Alles rückgängig machbar (Verschieben mit Inhalt = 1 Schritt). Gespeichert als Element `type: 'frame'` mit `name`, `color`, `rule` (`rule` = null, Platz für V2 Einsortieren).
 - Notizzettel / Text (fertig 19.11.): Knopf „Zettel“ / Taste N bzw. „Text“ / Taste T, dann Klick aufs Board → Element entsteht mittig am Klickpunkt, Text sofort editierbar (Enter = neue Zeile, Esc oder Klick daneben = fertig; Doppelklick = wieder bearbeiten). Zettel 200×200, Standard gelb mit schwarzer Schrift M (20); freier Text ohne Hintergrund, weiße Schrift L (32), Höhe passt sich dem Text an, leerer neuer Text wird verworfen. Auswahl-Leiste: Zettel-Hintergrund (10 Farben: Gelb, Orange, Rosa, Mint, Himmel, Flieder, Weiß, Ocker, Petrol, Dunkel), Textfarbe (10: Schwarz, Weiß, Grau + Rahmen-Akzente), Größe S/M/L/XL (14/20/32/48) – auch für Mehrfachauswahl. Größe per Anfasser frei (Schrift bleibt); zusammen mit Bildern skaliert, wächst die Schrift mit. Ebenen: Rahmen hinten, dann Bilder, Notizen/Text vorn; wandern mit Rahmen mit. Anlegen + erster Text = 1 Rückgängig-Schritt, jede Bearbeitung/Farbe/Größe/Verschieben/Löschen ebenso. Gespeichert als `type: 'note'` { text, bg, color, fontSize } bzw. `type: 'text'` { text, color, fontSize }; Text ist reiner Text (Anzeige nie als HTML).
+- Alt-Skalieren (fertig 19.11., Bau-Schritt 4b). Alt = „mit Inhalt“ / Skalier-Modifikator:
+  - Alt + Mausrad skaliert die Auswahl (Rad ohne Alt = Board-Zoom; Strg + Rad = Touchpad-Pinch = Zoom). Bilder und Mehrfachauswahl mit festem Seitenverhältnis; Rahmen samt Inhalt (Mittelpunkt-Regel, verschachtelt); im Bildtransform das Bild im Ausschnitt. Zettel/Text nur als Teil einer Gruppe/eines Rahmens (Schrift wächst mit), allein nicht. Ohne Auswahl passiert nichts. Chrome liefert mit Alt teils deltaX – beide Achsen werden ausgewertet; Alt allein fokussiert nicht das Browser-Menü.
+  - Dynamik nichtlinear (js/scaling.js, Konstanten oben): langsam 0,8 %/Raste, schnell bis 15 %/Raste; Geschwindigkeit aus Zeitabstand der Rasten (geglättet), Pause > 250 ms = wieder fein. Touchpad-Deltas werden auf Rasten normiert.
+  - Skalierzentrum = Mauszeiger; Fangbereiche an den 4 Ecken und der Mitte der Auswahl (im Transform: des Bildes, gedreht) mit Radius 15 % der kleineren Seite auf dem Bildschirm, begrenzt auf 12–32 px; eingerastet wird exakt von Ecke/Mitte skaliert. Fadenkreuz am Zentrum (eingerastet: Ring, Akzentfarbe) + Prozentanzeige während des Drehens.
+  - Ein zusammenhängendes Drehen = 1 Rückgängig-Schritt (Ende nach 500 ms Pause oder bei jeder anderen Aktion).
+  - Alt + Ecke eines Rahmens ziehen = Rahmen + Inhalt proportional (Gegenecke fest); ohne Alt wie bisher nur der Rahmen.
+- Reset-Knöpfe in der Auswahl-Leiste (fertig 19.11.):
+  - Bild: „Standardgröße“ = Platziergröße (Breite 320, Seitenverhältnis des aktuellen Ausschnitts) und „Pixelgröße“ = 1 Board-Einheit pro Originalpixel (sichtbarer Ausschnitt in Originalpixeln). Mitte bleibt, auch für mehrere Bilder.
+  - Rahmen: „Skalierung zurücksetzen“ (erscheint nur nach Alt-Skalierung). Jeder Rahmen merkt sich `scaleMem = { k, items: { id: Faktor } }` (kumulativ). Reset nimmt die Skalierung von Rahmen und NUR den damals mitskalierten Elementen zurück, um den aktuellen Rahmen-Mittelpunkt; spätere Verschiebungen bleiben (relativ zurückskaliert), später hinzugekommener Inhalt bleibt unverändert; danach Merker leer. Auch für mehrere Rahmen; 1 Rückgängig-Schritt.
+- Bildansicht (fertig 19.11.): Doppelklick aufs Bild öffnet ein dunkles Pop-up mit dem GANZEN Original (nicht dem Ausschnitt) bei 100 % (echte Pixel, mittig, auch wenn größer als der Bildschirm). Unten Dateiname + Datum und Zoomanzeige; Klick darauf = 100 % ↔ Bildschirm füllen (einpassen). Rad zoomt um den Mauszeiger (gleiche Dynamik, Pinch auch), Ziehen verschiebt, ab 200 % pixelgenau. Pfeiltasten ← → ↑ ↓ blättern räumlich zum nächsten Bild auf dem Board (bevorzugt im Kegel ±45°, sonst Halbebene; am Rand nichts). Esc oder × schließt; die Auswahl liegt danach auf dem zuletzt gezeigten Bild. Ändert nichts am Board. Leere Seitenleiste ist für V2 vorbereitet (unsichtbar).
 - Ansichts-Tasten (fertig 19.11.): `A` = alles zeigen, `F` = auf die Auswahl springen (ohne Auswahl wie A, höchstens 400 %), `0` = Zoom 100 % (Bildmitte bleibt), Klick auf die Zoom-Anzeige = 100 %. Sanft animiert (250 ms), keine Rückgängig-Schritte, wirken nicht beim Tippen oder mit Strg/Alt.
 - Tags tippen: Datum (automatisch, siehe 1.5, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
 - Filter nach Tags
@@ -105,6 +115,7 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 2c. Neue Dateien erkennen, „Neu“, Ordner reinziehen, Eingangsdatum, Tagessortierung, Korrekturvorschlag – fertig 19.11.
 3. Rahmen – fertig 19.11.
 4. Notizzettel / Text (Hintergrund- und Textfarbe, Schriftgröße) + Ansichts-Tasten A/F/0 – fertig 19.11.
+4b. Alt-Skalieren, Reset-Knöpfe, Bildansicht – fertig 19.11. (Details unten)
 5. Tags (Einzel + Mehrfach, Vorschläge; Datum-Datenebene steht schon)
 6. Filter
 
@@ -123,7 +134,7 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
    - Versionsstapel: neue Version vorne, ältere dahinter (zuerst die einfachere Lösung; Aufklappen vs. eigenes Fenster offen).
    - „Neueste Variante je Shot“; Zähler am Tab („Anlieferungen (7 neu)“).
 3. **V2.2 „Struktur anlegen“ aus Tags** (z. B. Shots als Spalten × Varianten als Zeilen; Gruppierung wählbar: Shot × Variante, Absender, Tag).
-4. **V2.3 Vergleich** – wichtig: Bilder übereinanderlegen und an/aus schalten (wie früher in Photoshop/After Effects), dazu nebeneinander und Schieberegler. Kann mit dem Versionsstapel verbunden werden.
+4. **V2.3 Vergleich** – dockt an die Bildansicht an (Seitenleiste ist vorbereitet), ebenso die Versionshistorie des Versionsstapels. Wichtig: Bilder übereinanderlegen und an/aus schalten (wie früher in Photoshop/After Effects), dazu nebeneinander und Schieberegler. Kann mit dem Versionsstapel verbunden werden.
 5. V2.4 Collections (virtuelle, verschachtelbare Sammlungen – Basis für Präsentation)
 6. V2.5 Zeitleiste
 7. V2.6 Präsentationsmodus (aus Collections)
@@ -162,16 +173,18 @@ Formen-Bibliothek, Vorlagen, Zusammenarbeit. (Zeichnen war nur ein früher Vorsc
 | Auf Auswahl springen | Taste `F` (ohne Auswahl wie `A`) |
 | Zoom 100 % | Taste `0` oder Klick auf die Zoom-Anzeige oben rechts |
 | Auswahl | Klick, Umschalt+Klick, Auswahlrahmen auf leerer Fläche ziehen (Umschalt = hinzufügen) |
-| Skalieren | Eck-Anfasser der Auswahl ziehen |
+| Skalieren | Eck-Anfasser der Auswahl ziehen; Alt + Mausrad (Zentrum = Mauszeiger, rastet an Ecken/Mitte ein; langsam fein, schnell beschleunigt) |
+| Größe zurücksetzen | Auswahl-Leiste: Bild „Standardgröße“ / „Pixelgröße“; Rahmen „Skalierung zurücksetzen“ |
+| Bildansicht | Doppelklick aufs Bild: Original bei 100 %, Klick auf Zoomanzeige = 100 % ↔ füllen, Rad = zoomen, Ziehen = verschieben, Pfeiltasten = nächstes Bild, `Esc`/× = schließen |
 | Löschen vom Board | `Entf` oder Mülleimer – entfernt nur vom Board, nie die Datei |
 | Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z (oder Strg+Y) – nur im aktiven Tab |
-| Ausschnitt | Doppelklick aufs Bild; Kanten ziehen = Ausschnitt, im Bild ziehen = verschieben, runde gelbe Anfasser = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), Enter/Esc/Klick daneben = fertig |
+| Ausschnitt | Alt + Doppelklick aufs Bild; Alt + Rad = Bild im Ausschnitt skalieren; Kanten ziehen = Ausschnitt, im Bild ziehen = verschieben, runde gelbe Anfasser = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), Enter/Esc/Klick daneben = fertig |
 | Neue Bilder | „Aktualisieren“ (sonst automatisch: beim Zurückwechseln, stündlich); „Nur neue“, „Alle als gesehen markieren“ |
 | Ordner aufs Board | Ordner oder Bilder aus dem Projekt im Explorer packen und aufs Board ziehen |
 | Datum | Rechtsklick auf ein Bild in der Bilderliste; Vorschläge „Übernehmen/Ignorieren“; Schalter „Datum-Vorschläge“ |
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen (mit Rückfrage) |
 | Rahmen anlegen | Knopf „▢ Rahmen“ oder Taste `R`, dann aufziehen (Klick = Standardgröße, `Esc` = abbrechen); „Rahmen um Auswahl“ in der Auswahl-Leiste oder `Strg+G` |
-| Rahmen bearbeiten | Beschriftung oder Rand anklicken/ziehen (Inhalt wandert mit); Doppelklick auf Beschriftung = umbenennen; Eck-Anfasser = Größe (Inhalt bleibt); Farbpunkte in der Auswahl-Leiste; `Entf` = nur Rahmen löschen |
+| Rahmen bearbeiten | Beschriftung oder Rand anklicken/ziehen (Inhalt wandert mit); Doppelklick auf Beschriftung = umbenennen; Eck-Anfasser = Größe (Inhalt bleibt), mit Alt = Rahmen + Inhalt; Alt + Rad = Rahmen + Inhalt; Farbpunkte in der Auswahl-Leiste; `Entf` = nur Rahmen löschen |
 | Notizzettel | Knopf „▤ Zettel“ oder Taste `N`, dann Klick aufs Board; tippen (Enter = neue Zeile), `Esc`/Klick daneben = fertig; Doppelklick = bearbeiten |
 | Freier Text | Knopf „T Text“ oder Taste `T`, dann Klick aufs Board; wie Zettel, ohne Hintergrund |
 | Zettel/Text gestalten | Auswahl-Leiste: Zettel-Hintergrund, Textfarbe, Größe S/M/L/XL (auch für mehrere); Eck-Anfasser = Größe frei |

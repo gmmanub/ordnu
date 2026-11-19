@@ -20,16 +20,18 @@ App: https://gmmanub.github.io/ordnu/
 | Auf Auswahl springen | `F` |
 | Zoom 100 % | `0` oder Klick auf die Zoom-Anzeige |
 | Mehrere auswählen | Umschalt + Klick oder Rahmen auf leerer Fläche aufziehen |
-| Skalieren | Ecken der Auswahl ziehen |
+| Skalieren | Ecken der Auswahl ziehen · `Alt` + Mausrad (Zentrum = Mauszeiger, rastet an Ecken/Mitte ein) |
+| Größe zurücksetzen | Auswahl-Leiste: „Standardgröße“, „Pixelgröße“ (Bilder) · „Skalierung zurücksetzen“ (Rahmen) |
+| Bildansicht | Doppelklick aufs Bild · Klick auf Zoomanzeige = 100 % ↔ füllen · Pfeiltasten = nächstes Bild · `Esc` = schließen |
 | Vom Board entfernen | `Entf` oder Mülleimer (die Datei bleibt erhalten) |
 | Rückgängig / Wiederholen | `Strg+Z` / `Strg+Umschalt+Z` – je Tab, bleibt auch nach dem Schließen erhalten |
-| Ausschnitt / Bildtransform | Doppelklick aufs Bild: Kanten ziehen, Bild verschieben, gelbe Punkte = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), `Enter`/`Esc` = fertig |
+| Ausschnitt / Bildtransform | `Alt` + Doppelklick aufs Bild (`Alt` + Rad = Bild im Ausschnitt skalieren): Kanten ziehen, Bild verschieben, gelbe Punkte = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), `Enter`/`Esc` = fertig |
 | Neue Bilder suchen | „⟳ Aktualisieren“ (passiert auch automatisch beim Zurückwechseln und stündlich) |
 | Ordner aufs Board | Ordner aus dem Projekt im Explorer packen und aufs Board ziehen – Bilder, die schon im Tab liegen, werden übersprungen |
 | Datum ändern | Rechtsklick auf ein Bild in der Bilderliste |
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen |
 | Rahmen anlegen | „▢ Rahmen“ oder `R`, dann aufziehen · um eine Auswahl: `Strg+G` |
-| Rahmen bearbeiten | Beschriftung/Rand ziehen = mit Inhalt verschieben · Doppelklick auf Beschriftung = umbenennen · Ecken = Größe · Farbpunkte · `Entf` löscht nur den Rahmen |
+| Rahmen bearbeiten | Beschriftung/Rand ziehen = mit Inhalt verschieben · Doppelklick auf Beschriftung = umbenennen · Ecken = Größe (mit `Alt` samt Inhalt) · `Alt` + Rad = mit Inhalt skalieren · Farbpunkte · `Entf` löscht nur den Rahmen |
 | Notizzettel | „▤ Zettel“ oder `N`, dann aufs Board klicken und tippen · `Esc` = fertig · Doppelklick = bearbeiten |
 | Freier Text | „T Text“ oder `T`, dann aufs Board klicken und tippen |
 | Zettel/Text gestalten | Auswahl-Leiste: Hintergrund, Textfarbe, Größe S/M/L/XL |

@@ -10,6 +10,7 @@ import {
   loadProjectData, saveProjectData, scanImages, getThumbnail, loadHistoryRaw, saveHistoryRaw,
 } from './files.js';
 import { Board } from './board.js';
+import { Viewer } from './viewer.js';
 import { TabHistory, capture, diff } from './history.js';
 
 const $ = id => document.getElementById(id);
@@ -45,6 +46,7 @@ export const state = {
 };
 
 let board;
+export let viewer;
 export const _board = () => board; // nur für Tests
 
 // ---------- Hilfen ----------
@@ -192,17 +194,19 @@ function afterHistoryStep(res) {
 
 export function undo() {
   if (!state.data) return false;
+  board.endAltScale();
   return afterHistoryStep(state.hist.undo(state.data.activeTab, state.data));
 }
 
 export function redo() {
   if (!state.data) return false;
+  board.endAltScale();
   return afterHistoryStep(state.hist.redo(state.data.activeTab, state.data));
 }
 
 window.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey) || e.target.closest('input, textarea')) return;
-  if (!$('modal').hidden || $('app').hidden) return;
+  if (!$('modal').hidden || $('app').hidden || viewer?.isOpen) return;
   const key = e.key.toLowerCase();
   if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if ((key === 'z' && e.shiftKey) || key === 'y') { e.preventDefault(); redo(); }
@@ -909,6 +913,28 @@ async function init() {
     },
     onDropHandles: (handles, x, y) => dropHandles(handles, x, y).catch(err => toast(err.message, 8000)),
     getImageUrl: imageUrlFor,
+    getImageSize: path => {
+      const t = state.images.get(path)?.thumb;
+      if (!t) ensureThumb(path);
+      return t ? { width: t.width, height: t.height } : null;
+    },
+    onNotice: msg => toast(msg, 6000),
+    onOpenViewer: id => viewer.open(id),
+  });
+
+  viewer = new Viewer($('viewer'), {
+    getItem: id => board.byId(id),
+    getFile: async path => {
+      const entry = state.images.get(path);
+      return entry ? entry.img.handle.getFile() : null;
+    },
+    describe: path => {
+      const eff = dateInfo(path);
+      const date = eff?.date ? `${formatDate(eff.date)}${eff.time ? ` ${eff.time}` : ''}` : '';
+      return { name: path.split('/').pop(), date, path };
+    },
+    neighbor: (id, dir) => board.neighbor(id, dir),
+    onClose: id => { if (id && board.byId(id)) board.setSelection([id]); $('viewport').focus(); },
   });
 
   $('btn-pick-root').addEventListener('click', pickRoot);
@@ -930,6 +956,7 @@ async function init() {
   setInterval(() => { if (state.projectDir && !$('app').hidden) rescan().catch(() => {}); }, RESCAN_EVERY_MS);
 
   $('btn-back').addEventListener('click', async () => {
+    viewer.close();
     await flushAll();
     if (state.observer) { try { state.observer.disconnect(); } catch { /* egal */ } state.observer = null; }
     releaseImages();

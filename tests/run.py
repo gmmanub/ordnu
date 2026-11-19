@@ -282,8 +282,8 @@ def main():
         print("Ausschnitt / Bildtransform")
         c0 = ev("const c = d.items.find(i => i.tab === d.activeTab); return { item: JSON.parse(JSON.stringify(c)), r: M.imageRect(c) };")
         cx, cy = center("#world .item")
-        page.mouse.dblclick(cx, cy)
-        check(page.is_visible(".crop-bar") and page.locator("#world .item.cropping").count() == 1, "Doppelklick öffnet Ausschnitt-Modus")
+        page.keyboard.down("Alt"); page.mouse.dblclick(cx, cy); page.keyboard.up("Alt")
+        check(page.is_visible(".crop-bar") and page.locator("#world .item.cropping").count() == 1, "Alt + Doppelklick öffnet Ausschnitt-Modus")
         hx, hy = center(".handle.win.e")
         drag(hx, hy, hx - 60, hy)
         c1 = ev("const c = d.items.find(i => i.tab === d.activeTab); return { item: { ...c }, r: M.imageRect(c) };")
@@ -326,7 +326,7 @@ def main():
         page.keyboard.press("Escape")
         check(not page.is_visible(".crop-bar") and page.locator("#world .item.cropping").count() == 0, "Esc beendet Ausschnitt-Modus")
         cx, cy = center("#world .item")
-        page.mouse.dblclick(cx, cy)
+        page.keyboard.down("Alt"); page.mouse.dblclick(cx, cy); page.keyboard.up("Alt")
         page.wait_for_selector(".crop-bar", state="visible")
         page.keyboard.press("Enter")
         check(not page.is_visible(".crop-bar") and page.locator("#world .item.cropping").count() == 0, "Enter beendet Ausschnitt-Modus")
@@ -967,6 +967,291 @@ def main():
         page.mouse.wheel(0, -100)
         page.wait_for_timeout(400)
         check(ev("return B.anim;") is None, "Mausrad bricht laufenden Sprung ab")
+
+        print("Alt + Rad: Skalieren mit Dynamik und Einrasten")
+        # Eigener Tab: zwei Bilder, ein Rahmen mit Bild + Zettel, Zettel allein
+        ev("""const tab = M.createTab('Alt-Skalieren'); d.tabs.push(tab); app.switchTab(tab.id);
+          B.view = { x: 0, y: 0, scale: 1 }; B.applyView(); B.setSelection([]);
+          await app.placeImage('alt_x.jpg', 100, 100, { centered: false });
+          await app.placeImage('neu_b.jpg', 700, 100, { centered: false });
+          await app.placeImage('neu_fokus.jpg', 1200, 500, { centered: false });
+          B.setSelection([]); return true;""")
+        vpb = page.locator("#viewport").bounding_box()
+        page.mouse.move(vpb["x"] + 5, vpb["y"] + 5)
+        ax_ = by("alt_x.jpg"); bx_ = by("neu_b.jpg")
+        hA = hist_len()
+
+        def altwheel(steps, dy=-100, gap=400, x=None, y=None, axis="y"):
+            if x is not None: page.mouse.move(x, y)
+            page.keyboard.down("Alt")
+            for _ in range(steps):
+                if axis == "y": page.mouse.wheel(0, dy)
+                else: page.mouse.wheel(dy, 0)
+                page.wait_for_timeout(gap)
+            page.keyboard.up("Alt")
+
+        # Ohne Auswahl: Alt+Rad tut nichts (kein Zoom, keine Änderung)
+        v0 = ev("return B.view.scale;")
+        altwheel(1, x=vpb["x"] + 300, y=vpb["y"] + 300)
+        check(ev("return B.view.scale;") == v0 and by("alt_x.jpg")["w"] == ax_["w"], "Alt+Rad ohne Auswahl: nichts passiert")
+
+        # Langsam: feine Schritte (0,8 %/Raste) um die Bildmitte (eingerastet)
+        ev(f"B.setSelection(['{ax_['id']}']); return true;")
+        mx, my = scr(ax_["x"] + ax_["w"] / 2 + 3, ax_["y"] + ax_["h"] / 2 - 2)  # knapp neben der Mitte → rastet ein
+        page.mouse.move(mx, my)
+        page.keyboard.down("Alt")
+        page.mouse.wheel(0, -100)
+        page.wait_for_timeout(50)
+        piv = ev("const p = document.querySelector('.overlay .pivot'); return p ? { snap: p.dataset.snap, cls: p.className } : null;")
+        pct = page.text_content(".overlay .scale-pct") if page.locator(".overlay .scale-pct").count() else ""
+        page.screenshot(path=os.path.join(OUT, "13_fadenkreuz.png"), clip={"x": vpb["x"], "y": vpb["y"], "width": 700, "height": 450})
+        for _ in range(4):
+            page.wait_for_timeout(400); page.mouse.wheel(0, -100)
+        page.keyboard.up("Alt")
+        a1 = by("alt_x.jpg")
+        k_slow = a1["w"] / ax_["w"]
+        check(piv and piv["snap"] == "c" and "snapped" in piv["cls"], f"Fadenkreuz rastet in der Mitte ein: {piv}")
+        check(pct.strip() == "101 %", f"Prozentanzeige während des Drehens: {pct!r}")
+        check(abs(k_slow - 1.008 ** 5) < 1e-3, f"Langsam: 5 Rasten ≈ +4 % ({k_slow:.4f})")
+        c0 = (ax_["x"] + ax_["w"] / 2, ax_["y"] + ax_["h"] / 2); c1 = (a1["x"] + a1["w"] / 2, a1["y"] + a1["h"] / 2)
+        check(abs(c0[0] - c1[0]) < 0.01 and abs(c0[1] - c1[1]) < 0.01, "Eingerastet: exakt von der Mitte skaliert")
+        check(abs(a1["h"] / a1["w"] - ax_["h"] / ax_["w"]) < 1e-9, "Seitenverhältnis bleibt")
+        page.wait_for_timeout(650)
+        check(hist_len() == hA + 1, f"Eine Dreh-Serie (mit Pausen < 0,5 s) = ein Rückgängig-Schritt ({hist_len() - hA})")
+        check(page.locator(".overlay .pivot").count() == 0, "Fadenkreuz verschwindet nach dem Drehen")
+
+        # Schnell: beschleunigt deutlich
+        a1 = by("alt_x.jpg")
+        mx, my = scr(a1["x"] + a1["w"] / 2, a1["y"] + a1["h"] / 2)
+        altwheel(8, dy=100, gap=15, x=mx, y=my)
+        a2 = by("alt_x.jpg")
+        k_fast = a1["w"] / a2["w"]
+        check(k_fast > 1.008 ** 8 * 1.15, f"Schnell: beschleunigt (8 Rasten → ÷{k_fast:.2f}, linear wäre ÷{1.008 ** 8:.3f})")
+        page.wait_for_timeout(650)
+
+        # Ecke einrasten (oben links bleibt fest)
+        a2 = by("alt_x.jpg")
+        mx, my = scr(a2["x"] + 4, a2["y"] + 3)
+        altwheel(3, x=mx, y=my)
+        a3 = by("alt_x.jpg")
+        check(abs(a3["x"] - a2["x"]) < 0.01 and abs(a3["y"] - a2["y"]) < 0.01 and a3["w"] > a2["w"], "Ecke oben links eingerastet: Ecke bleibt fest")
+        page.wait_for_timeout(650)
+        # Frei (außerhalb der Fangbereiche): Zeiger-Punkt bleibt fest
+        a3 = by("alt_x.jpg")
+        px_, py_ = a3["x"] + a3["w"] * 0.3, a3["y"] + a3["h"] * 0.7
+        rel = ((px_ - a3["x"]) / a3["w"], (py_ - a3["y"]) / a3["h"])
+        mx, my = scr(px_, py_)
+        altwheel(2, x=mx, y=my)
+        a4 = by("alt_x.jpg")
+        relb = ((px_ - a4["x"]) / a4["w"], (py_ - a4["y"]) / a4["h"])
+        check(abs(rel[0] - relb[0]) < 1e-3 and abs(rel[1] - relb[1]) < 1e-3 and a4["w"] > a3["w"], "Frei: skaliert um den Mauszeiger")
+        page.wait_for_timeout(650)
+
+        # Chrome liefert mit Alt teils deltaX → wird auch ausgewertet
+        a4 = by("alt_x.jpg")
+        altwheel(1, dy=-100, axis="x", x=mx, y=my)
+        check(by("alt_x.jpg")["w"] > a4["w"], "Alt+Rad über deltaX (horizontal) wird erkannt")
+        page.wait_for_timeout(650)
+
+        # Gruppe: beide Bilder, fest
+        ax_ = by("alt_x.jpg"); bx_ = by("neu_b.jpg")
+        ev(f"B.setSelection(['{ax_['id']}', '{bx_['id']}']); return true;")
+        g0 = ev("return M.boundsOf(B.selectedItems());")
+        mx, my = scr(g0["x"] + g0["w"] / 2, g0["y"] + g0["h"] / 2)
+        altwheel(3, dy=100, x=mx, y=my)
+        ax2 = by("alt_x.jpg"); bx2 = by("neu_b.jpg")
+        k1, k2 = ax2["w"] / ax_["w"], bx2["w"] / bx_["w"]
+        check(abs(k1 - k2) < 1e-9 and k1 < 1, f"Gruppe skaliert gemeinsam ({k1:.4f})")
+        page.wait_for_timeout(650)
+
+        # Zettel allein: Alt+Rad tut nichts
+        ev("""const n = M.createNote('note', d.activeTab, 300, 700); d.items.push(n); B.replaceItems(d.items.filter(i => i.tab === d.activeTab));
+          B.setSelection([n.id]); return true;""")
+        nn = [i for i in items() if i["type"] == "note"][0]
+        mx, my = scr(nn["x"] + nn["w"] / 2, nn["y"] + nn["h"] / 2)
+        altwheel(2, x=mx, y=my)
+        nn2 = [i for i in items() if i["type"] == "note"][0]
+        check(nn2["w"] == nn["w"] and nn2["fontSize"] == nn["fontSize"], "Zettel allein: Alt+Rad ignoriert")
+        # Zettel in Gruppe mit Bild: Schrift wächst mit
+        fid = by("neu_fokus.jpg")["id"]
+        ev(f"B.setSelection(['{nn['id']}', '{fid}']); return true;")
+        altwheel(2, x=mx, y=my)
+        nn3 = [i for i in items() if i["type"] == "note"][0]
+        check(nn3["w"] > nn["w"] and nn3["fontSize"] > nn["fontSize"], f"Zettel in Gruppe: wächst mit, Schrift auch ({nn3['fontSize']})")
+        page.wait_for_timeout(650)
+
+        print("Rahmen: Alt-Skalieren mit Inhalt und Zurücksetzen")
+        # Rahmen um alt_x + Zettel
+        ax_ = by("alt_x.jpg"); nn = [i for i in items() if i["type"] == "note"][0]
+        ev(f"""B.setSelection([]); const f = M.createFrame(d.activeTab, {ax_['x'] - 50}, {ax_['y'] - 50}, {ax_['w'] + 100}, {ax_['h'] + 100}, 'Hervorhebung');
+          d.items.push(f); const n = d.items.find(i => i.id === '{nn['id']}'); n.x = {ax_['x'] + 10}; n.y = {ax_['y'] + 10};
+          B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); B.setSelection([f.id]); return true;""")
+        fr0 = frames()[0]; ax_ = by("alt_x.jpg"); nn = [i for i in items() if i["type"] == "note"][0]; bx_ = by("neu_b.jpg")
+        hB = hist_len()
+        mx, my = scr(fr0["x"] + fr0["w"] / 2, fr0["y"] + fr0["h"] / 2)
+        altwheel(4, x=mx, y=my)
+        fr1 = frames()[0]; ax1 = by("alt_x.jpg"); nn1 = [i for i in items() if i["type"] == "note"][0]
+        kf = fr1["w"] / fr0["w"]
+        check(kf > 1 and abs(ax1["w"] / ax_["w"] - kf) < 1e-9 and abs(nn1["w"] / nn["w"] - kf) < 1e-9, f"Alt+Rad am Rahmen: Rahmen + Inhalt skalieren ({kf:.4f})")
+        check(by("neu_b.jpg")["w"] == bx_["w"], "Bild außerhalb bleibt unverändert")
+        page.wait_for_timeout(650)
+        check(hist_len() == hB + 1, "Ein Rückgängig-Schritt")
+        mem = frames()[0].get("scaleMem")
+        check(mem and abs(mem["k"] - kf) < 1e-9 and set(mem["items"]) == {ax_["id"], nn["id"]}, f"Rahmen merkt sich Faktor + Inhalt: {mem}")
+        check(page.locator("[data-ui=frame-scale-reset]").count() == 1, "Knopf „Skalierung zurücksetzen“ erscheint")
+
+        # Inhalt danach verschieben + neues Bild in den Rahmen legen
+        ev(f"""const n = d.items.find(i => i.id === '{nn['id']}'); n.x += 30; n.y += 20;
+          await app.placeImage('Lieferung B/l1.jpg', {fr1['x'] + fr1['w'] - 120}, {fr1['y'] + fr1['h'] - 90}, {{ centered: true }});
+          B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); return true;""")
+        new_img = by("Lieferung B/l1.jpg")
+        fr1 = frames()[0]; ev(f"B.setSelection(['{fr1['id']}']); return true;")
+        nn_moved = [i for i in items() if i["type"] == "note"][0]
+        page.click("[data-ui=frame-scale-reset]")
+        fr2 = frames()[0]; ax2 = by("alt_x.jpg"); nn2 = [i for i in items() if i["type"] == "note"][0]
+        fc = (fr2["x"] + fr2["w"] / 2, fr2["y"] + fr2["h"] / 2)
+        check(abs(fr2["w"] - fr0["w"]) < 1e-6 and abs(fr2["h"] - fr0["h"]) < 1e-6 and abs(fc[0] - (fr1["x"] + fr1["w"] / 2)) < 1e-6,
+              "Reset: Rahmen zurück auf Ursprungsgröße um seine Mitte")
+        check(abs(ax2["w"] - ax_["w"]) < 1e-6 and abs(nn2["w"] - nn["w"]) < 1e-6 and abs(nn2["fontSize"] - nn["fontSize"]) < 0.11,
+              "Reset: damaliger Inhalt zurück auf alte Größe (inkl. Schrift)")
+        exp_nx = fc[0] + (nn_moved["x"] + nn_moved["w"] / 2 - fc[0]) / kf
+        check(abs(nn2["x"] + nn2["w"] / 2 - exp_nx) < 1e-6, "Reset: spätere Verschiebung bleibt erhalten (relativ zurückskaliert)")
+        check(by("Lieferung B/l1.jpg")["w"] == new_img["w"] and by("Lieferung B/l1.jpg")["x"] == new_img["x"], "Reset: neu hinzugekommenes Bild bleibt unverändert")
+        check(not frames()[0].get("scaleMem"), "Merker danach geleert")
+        ev("app.undo(); return true;")
+        check(frames()[0].get("scaleMem") and abs(frames()[0]["w"] - fr1["w"]) < 1e-6, "Reset ist ein Rückgängig-Schritt")
+        ev("app.redo(); return true;")
+
+        # Alt + Ecke ziehen = mit Inhalt; ohne Alt nur Rahmen
+        fr0 = frames()[0]; ax_ = by("alt_x.jpg")
+        ev(f"B.setSelection(['{fr0['id']}']); return true;")
+        hx, hy = center(".handle.corner.se")
+        page.keyboard.down("Alt"); drag(hx, hy, hx + 80, hy + 10); page.keyboard.up("Alt")
+        fr1 = frames()[0]; ax1 = by("alt_x.jpg")
+        kk = fr1["w"] / fr0["w"]
+        check(kk > 1 and abs(fr1["h"] / fr0["h"] - kk) < 1e-6 and abs(ax1["w"] / ax_["w"] - kk) < 1e-6 and abs(fr1["x"] - fr0["x"]) < 1e-6,
+              f"Alt + Ecke: Rahmen + Inhalt proportional ({kk:.3f}), Gegenecke fest")
+        check(frames()[0]["scaleMem"] and abs(frames()[0]["scaleMem"]["k"] - kk) < 1e-6, "Alt + Ecke: Merker gesetzt")
+        hx, hy = center(".handle.corner.se")
+        drag(hx, hy, hx + 40, hy + 40)
+        check(abs(by("alt_x.jpg")["w"] - ax1["w"]) < 1e-9, "Ohne Alt: nur der Rahmen ändert die Größe")
+
+        # Mehrere Rahmen zurücksetzen
+        ev(f"""const f2 = M.createFrame(d.activeTab, {bx_['x'] - 30}, {bx_['y'] - 30}, {bx_['w'] + 60}, {bx_['h'] + 60}, 'Zweiter');
+          d.items.push(f2); B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); B.setSelection([f2.id]); return f2.id;""")
+        f2 = [f for f in frames() if f["name"] == "Zweiter"][0]
+        mx, my = scr(f2["x"] + f2["w"] / 2, f2["y"] + f2["h"] / 2)
+        altwheel(3, x=mx, y=my)
+        page.wait_for_timeout(650)
+        ids = [f["id"] for f in frames()]
+        ev(f"B.setSelection({json.dumps(ids)}); return true;")
+        page.click("[data-ui=frame-scale-reset]")
+        check(all(not f.get("scaleMem") for f in frames()) and abs(by("neu_b.jpg")["w"] - bx_["w"]) < 1e-6,
+              "Mehrere Rahmen auf einmal zurückgesetzt")
+        old_f = ev("return M.normalizeData({ version: 1, tabs: [{ id: 't', name: 'A' }], activeTab: 't', items: [{ id: 'f', tab: 't', type: 'frame', x: 0, y: 0, w: 10, h: 10 }] }).items[0];")
+        check(old_f["scaleMem"] is None, "Alte Rahmen ohne Merker werden übernommen")
+
+        print("Bild-Reset: Standard- und Pixelgröße")
+        ax_ = by("alt_x.jpg")
+        ev(f"B.setSelection(['{ax_['id']}']); return true;")
+        page.click("[data-ui=size-standard]")
+        a1 = by("alt_x.jpg")
+        check(abs(a1["w"] - 320) < 1e-6 and abs((a1["x"] + a1["w"] / 2) - (ax_["x"] + ax_["w"] / 2)) < 1e-6, "Standardgröße: Breite 320, Mitte bleibt")
+        page.click("[data-ui=size-pixel]")
+        a2 = by("alt_x.jpg")
+        check(abs(a2["w"] - 400) < 1e-6 and abs(a2["h"] - 300) < 1e-6, f"Pixelgröße: 400×300 Originalpixel = 400×300 Board-Einheiten ({a2['w']}×{a2['h']})")
+        # mit Ausschnitt: sichtbarer Ausschnitt in Originalpixeln
+        ev(f"""const it = d.items.find(i => i.id === '{ax_['id']}'); B.cb.onBeforeChange(); M.setWindow(it, it.x, it.y, it.w / 2, it.h); B.cb.onChange();
+          B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); return true;""")
+        page.click("[data-ui=size-standard]")
+        a3 = by("alt_x.jpg")
+        check(abs(a3["w"] - 320) < 1e-6 and abs(a3["h"] / a3["w"] - 300 / 200) < 1e-6, "Standardgröße mit Ausschnitt: Seitenverhältnis des Ausschnitts bleibt")
+        page.click("[data-ui=size-pixel]")
+        a4 = by("alt_x.jpg")
+        check(abs(a4["w"] - 200) < 1e-6, f"Pixelgröße mit Ausschnitt: sichtbare 200 Originalpixel ({a4['w']:.2f})")
+        h_before = hist_len(); ev("app.undo(); return true;")
+        check(abs(by("alt_x.jpg")["w"] - 320) < 1e-6, "Bild-Reset ist ein Rückgängig-Schritt")
+        ev("app.redo(); return true;")
+
+        print("Alt + Rad im Bildtransform")
+        ax_ = by("alt_x.jpg")
+        ev(f"B.setSelection([]); B.enterCrop('{ax_['id']}'); return true;")
+        r0 = ev(f"return M.imageRect(d.items.find(i => i.id === '{ax_['id']}'));")
+        mx, my = scr(r0["cx"] + 2, r0["cy"] - 2)
+        altwheel(3, x=mx, y=my)
+        it1 = by("alt_x.jpg")
+        r1 = ev(f"return M.imageRect(d.items.find(i => i.id === '{ax_['id']}'));")
+        check(r1["w"] > r0["w"] and abs(r1["cx"] - r0["cx"]) < 1e-6 and abs(r1["cy"] - r0["cy"]) < 1e-6 and it1["w"] == ax_["w"],
+              "Transform: Bild im Ausschnitt um die Bildmitte vergrößert, Ausschnitt bleibt")
+        page.wait_for_timeout(650)
+        ev("app.undo(); return true;")
+        r2 = ev(f"return M.imageRect(d.items.find(i => i.id === '{ax_['id']}'));")
+        check(abs(r2["w"] - r0["w"]) < 1e-6, "Transform-Skalierung: ein Rückgängig-Schritt")
+        page.keyboard.press("Escape")
+
+        print("Bildansicht (Doppelklick)")
+        ev("""for (const it of d.items.filter(i => i.tab === d.activeTab && i.type !== 'image')) B.setSelection([]);
+          d.items = d.items.filter(i => !(i.tab === d.activeTab && i.type !== 'image'));
+          const im = d.items.filter(i => i.tab === d.activeTab && i.type === 'image');
+          const pos = { 'alt_x.jpg': [100, 100], 'neu_b.jpg': [700, 120], 'neu_fokus.jpg': [140, 600], 'Lieferung B/l1.jpg': [1300, 140] };
+          for (const it of im) { const p = pos[it.path]; if (p) { it.x = p[0]; it.y = p[1]; it.w = 320; it.h = 240; it.crop = M.defaultCrop(); it.ar = 0.75; } }
+          B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); B.view = { x: 0, y: 0, scale: 0.5 }; B.applyView(); return true;""")
+        ax_ = by("alt_x.jpg")
+        cx, cy = scr(ax_["x"] + 160, ax_["y"] + 120)
+        page.mouse.dblclick(cx, cy)
+        page.wait_for_selector("#viewer:not([hidden]) .viewer-img:not([hidden])")
+        st = ev("const v = app.viewer; return { id: v.id, scale: v.view.scale, size: v.size, label: document.querySelector('.viewer-zoom').textContent, name: document.querySelector('.viewer-name').textContent, crop: !!document.querySelector('.crop-bar') };")
+        check(st["id"] == ax_["id"] and st["scale"] == 1 and st["size"] == {"w": 400, "h": 300} and st["label"].strip() == "100 %",
+              f"Doppelklick öffnet Bildansicht mit ganzem Original bei 100 %: {st}")
+        check(st["name"] == "alt_x.jpg" and not st["crop"], "Dateiname unten, kein Bildtransform")
+        page.screenshot(path=os.path.join(OUT, "12_bildansicht.png"))
+        page.click(".viewer-zoom")
+        fit = ev("const v = app.viewer; const r = v.stageRect(); return { s: v.view.scale, exp: Math.min(r.width / 400, r.height / 300) };")
+        check(abs(fit["s"] - fit["exp"]) < 1e-9 and page.text_content(".viewer-zoom").strip() != "100 %", f"Klick auf Zoomanzeige: Bildschirm füllen ({fit['s']:.3f})")
+        page.click(".viewer-zoom")
+        check(abs(ev("return app.viewer.view.scale;") - 1) < 1e-9, "Nochmal Klick: zurück auf 100 %")
+        sb = page.locator(".viewer-stage").bounding_box()
+        page.mouse.move(sb["x"] + 200, sb["y"] + 150)
+        v0 = ev("return { ...app.viewer.view };")
+        page.mouse.wheel(0, -100)
+        v1 = ev("return { ...app.viewer.view };")
+        ix0 = (200 - v0["x"]) / v0["scale"]; ix1 = (200 - v1["x"]) / v1["scale"]
+        check(v1["scale"] > 1 and abs(ix0 - ix1) < 1e-6, "Rad zoomt um den Mauszeiger")
+        drag(sb["x"] + 300, sb["y"] + 300, sb["x"] + 360, sb["y"] + 260)
+        v2 = ev("return { ...app.viewer.view };")
+        check(abs(v2["x"] - v1["x"] - 60) < 0.5 and abs(v2["y"] - v1["y"] + 40) < 0.5, "Ziehen verschiebt")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'neu_b.jpg'")
+        check(True, "Pfeil rechts → nächstes Bild rechts (neu_b)")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'l1.jpg'")
+        check(True, "Nochmal rechts → l1")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(200)
+        check(page.text_content(".viewer-name") == "l1.jpg", "Am rechten Rand: nichts passiert")
+        page.keyboard.press("ArrowLeft")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'neu_b.jpg'")
+        page.keyboard.press("ArrowLeft")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'alt_x.jpg'")
+        page.keyboard.press("ArrowDown")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'neu_fokus.jpg'")
+        check(True, "Pfeil links/runter: räumlich zum Nachbarn")
+        page.keyboard.press("ArrowUp")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'alt_x.jpg'")
+        hV = hist_len()
+        page.keyboard.press("ArrowDown")
+        page.wait_for_function("() => document.querySelector('.viewer-name').textContent === 'neu_fokus.jpg'")
+        page.keyboard.press("Escape")
+        fid = by("neu_fokus.jpg")["id"]
+        st = ev("return { open: app.viewer.isOpen, sel: [...B.selected] };")
+        check(not st["open"] and st["sel"] == [fid], "Esc schließt, Auswahl auf dem zuletzt gezeigten Bild")
+        check(hist_len() == hV and page.locator("#world .item").count() == 4, "Bildansicht ändert nichts am Board")
+        page.mouse.dblclick(*scr(ax_["x"] + 160, ax_["y"] + 120))
+        page.wait_for_selector("#viewer:not([hidden])")
+        page.click(".viewer-close")
+        check(not ev("return app.viewer.isOpen;"), "× schließt die Bildansicht")
+        nb = ev("return { r: B.neighbor(d.items.find(i => i.path === 'alt_x.jpg' && i.tab === d.activeTab).id, 'left') };")
+        check(nb["r"] is None, "Links vom linken Bild: kein Nachbar")
 
         print("Sicherheitssperre (eigenes Fenster, Sperre aktiv)")
         ctx_csp = browser.new_context()

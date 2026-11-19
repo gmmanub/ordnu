@@ -127,6 +127,11 @@ export function normalizeItem(item) {
     item.name = typeof item.name === 'string' ? item.name : 'Rahmen';
     if (!FRAME_COLORS.some(c => c.key === item.color)) item.color = 'standard';
     if (item.rule === undefined) item.rule = null; // Platz für Regeln (V2 Einsortieren)
+    // Merker für „Skalierung zurücksetzen“: { k, items: { id: Faktor } } – fehlt bei alten Daten
+    const m = item.scaleMem;
+    item.scaleMem = m && m.k > 0 && m.items && typeof m.items === 'object'
+      ? { k: m.k, items: Object.fromEntries(Object.entries(m.items).filter(([, v]) => v > 0)) }
+      : null;
   }
   if (item.type === 'note' || item.type === 'text') normalizeNote(item);
   return item;

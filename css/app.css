@@ -207,3 +207,32 @@ button.danger { background: var(--warn); border-color: var(--warn); color: #1b1c
 .overlay .sel-bar .fs button.on { border-color: var(--select); color: var(--select); }
 .zoom-label { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 2px 6px; }
 .zoom-label:hover { border-color: var(--line); color: var(--text); }
+
+/* ---------- Alt-Skalieren: Skalierzentrum + Prozent ---------- */
+.overlay .pivot { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; }
+.overlay .pivot::before, .overlay .pivot::after { content: ''; position: absolute; background: var(--select); }
+.overlay .pivot::before { left: 8px; top: 0; width: 2px; height: 18px; }
+.overlay .pivot::after { top: 8px; left: 0; height: 2px; width: 18px; }
+.overlay .pivot.snapped { width: 24px; height: 24px; margin: -12px 0 0 -12px; border: 2px solid var(--accent); border-radius: 50%; }
+.overlay .pivot.snapped::before, .overlay .pivot.snapped::after { background: var(--accent); }
+.overlay .pivot.snapped::before { left: 9px; top: -2px; height: 24px; }
+.overlay .pivot.snapped::after { top: 9px; left: -2px; width: 24px; }
+.overlay .scale-pct { position: absolute; pointer-events: none; background: rgb(0 0 0 / 0.75); color: var(--text);
+  font-size: 12px; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+
+/* ---------- Bildansicht ---------- */
+.viewer { position: fixed; inset: 0; z-index: 50; background: #0c0c0e; display: grid;
+  grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; outline: none; }
+.viewer-stage { position: relative; overflow: hidden; cursor: grab; grid-column: 1; grid-row: 1; touch-action: none; }
+.viewer-stage.panning { cursor: grabbing; }
+.viewer-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; pointer-events: none; max-width: none; }
+.viewer-img.pixelated { image-rendering: pixelated; }
+.viewer-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--warn); }
+.viewer-side { grid-column: 2; grid-row: 1 / span 2; width: 280px; background: var(--panel); border-left: 1px solid var(--line); }
+.viewer-bar { grid-column: 1; grid-row: 2; display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+  background: var(--panel); border-top: 1px solid var(--line); }
+.viewer-bar .spacer { flex: 1; }
+.viewer-name { font-weight: 600; }
+.viewer-zoom { min-width: 72px; font-variant-numeric: tabular-nums; }
+.viewer-close { position: absolute; top: 12px; right: 14px; z-index: 2; width: 36px; height: 36px; padding: 0;
+  font-size: 22px; line-height: 1; border-radius: 50%; background: rgb(0 0 0 / 0.55); }

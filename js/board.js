@@ -305,7 +305,7 @@ export class Board {
       if (e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.querySelector('.modal:not([hidden])')) return;
       if (e.code === 'Space') { this.spaceDown = true; vp.classList.add('space'); e.preventDefault(); }
-      if (e.key === 'Escape') this.exitCrop();
+      if (e.key === 'Escape' || (e.key === 'Enter' && this.cropId)) { e.preventDefault(); this.exitCrop(); }
       if ((e.key === 'f' || e.key === 'F') && !this.cropId) this.fitAll();
       if ((e.key === 'Delete' || e.key === 'Backspace') && !this.cropId) this.removeSelected();
     });
@@ -314,16 +314,21 @@ export class Board {
     });
 
     vp.addEventListener('dragover', e => {
-      if (e.dataTransfer.types.includes('application/x-ordnu-path')) {
+      const types = e.dataTransfer.types;
+      if (types.includes('application/x-ordnu-path') || types.includes('Files')) {
         e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
       }
     });
     vp.addEventListener('drop', e => {
-      const path = e.dataTransfer.getData('application/x-ordnu-path');
-      if (!path) return;
-      e.preventDefault();
       const p = this.pointerWorld(e);
-      this.cb.onDropImage(path, p.x, p.y);
+      const path = e.dataTransfer.getData('application/x-ordnu-path');
+      if (path) { e.preventDefault(); this.cb.onDropImage(path, p.x, p.y); return; }
+      // Ordner/Dateien aus dem Explorer: Handles müssen sofort (noch im Ereignis) angefordert werden.
+      const items = [...e.dataTransfer.items].filter(i => i.kind === 'file');
+      if (!items.length) return;
+      e.preventDefault();
+      const handles = items.map(i => (typeof i.getAsFileSystemHandle === 'function' ? i.getAsFileSystemHandle() : null));
+      this.cb.onDropHandles(handles, p.x, p.y);
     });
 
     new ResizeObserver(() => this.applyView()).observe(vp);

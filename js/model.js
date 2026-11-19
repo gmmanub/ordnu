@@ -32,6 +32,9 @@ export function createEmptyData() {
     activeTab: first.id,
     items: [],
     tags: {},
+    files: {},            // Pfad → { eingang, mtime, neu?, ignoreSuggest? } (PFLICHTENHEFT 1.5)
+    firstScanDone: false, // erstes Einlesen des Projekts erledigt?
+    settings: { dateSuggestions: true },
   };
 }
 
@@ -48,6 +51,9 @@ export function normalizeData(raw) {
     activeTab: raw.activeTab,
     items: Array.isArray(raw.items) ? raw.items.filter(i => i && i.id && i.tab) : [],
     tags: raw.tags && typeof raw.tags === 'object' ? raw.tags : {},
+    files: raw.files && typeof raw.files === 'object' ? raw.files : {},
+    firstScanDone: raw.firstScanDone === true,
+    settings: { dateSuggestions: true, ...(raw.settings && typeof raw.settings === 'object' ? raw.settings : {}) },
   };
   for (const tab of data.tabs) {
     tab.name = typeof tab.name === 'string' && tab.name.trim() ? tab.name : 'Board';
@@ -212,4 +218,88 @@ export function scaleGroup(items, start, ax, ay, k) {
     it.w = s.w * k; it.h = s.h * k;
   });
   return k;
+}
+
+// ---------- Datum (PFLICHTENHEFT 1.5) ----------
+// Der Browser kennt nur das Änderungsdatum einer Datei. ordnu merkt sich daher das Eingangsdatum
+// (wann die App die Datei zuerst gesehen hat). Ein Tagesordner im Format JJ.MM.TT hat Vorrang.
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+export const SUGGEST_MAX_AGE_MS = 2 * 365 * DAY_MS;
+const pad = n => String(n).padStart(2, '0');
+
+// "26.11.19" → "2026-11-19" (fest als JJ.MM.TT), sonst null.
+export function parseDayFolder(name) {
+  const m = /^(\d{2})\.(\d{2})\.(\d{2})$/.exec(name);
+  if (!m) return null;
+  const y = 2000 + Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}
+
+// Nächstgelegener Tagesordner im Pfad (nur Ordner, nicht der Dateiname).
+export function dayFolderDate(path) {
+  const parts = path.split('/').slice(0, -1);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const d = parseDayFolder(parts[i]);
+    if (d) return d;
+  }
+  return null;
+}
+
+export function isoDate(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function hhmm(ms) {
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function formatDate(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+export function formatDay(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${WEEKDAYS[new Date(y, m - 1, d).getDay()]} ${formatDate(iso)}`;
+}
+
+// Automatisches Datum/Uhrzeit eines Bildes. info = data.files[path].
+export function autoDate(path, info) {
+  const folder = dayFolderDate(path);
+  const ms = info ? info.eingang : null;
+  return {
+    date: folder || (ms != null ? isoDate(ms) : null),
+    time: ms != null ? hhmm(ms) : null,
+    source: folder ? 'ordner' : 'eingang',
+  };
+}
+
+// Wirksames Datum: von Hand gesetzte Tags haben immer Vorrang.
+export function effectiveDate(path, info, tags) {
+  const a = autoDate(path, info);
+  const t = tags || {};
+  return {
+    date: t.datum || a.date,
+    time: t.uhrzeit || a.time,
+    manual: Boolean(t.datum),
+    source: t.datum ? 'hand' : a.source,
+  };
+}
+
+// Korrekturvorschlag: Dateidatum deutlich älter als das Eingangsdatum und plausibel?
+export function dateSuggestion(path, info, tags, settings, now = Date.now()) {
+  if (!settings || settings.dateSuggestions === false) return null;
+  if (!info || info.ignoreSuggest || info.mtime == null || info.eingang == null) return null;
+  if ((tags && tags.datum) || dayFolderDate(path)) return null;
+  const m = info.mtime;
+  if (m > now || m < now - SUGGEST_MAX_AGE_MS) return null;
+  if (info.eingang - m <= DAY_MS) return null;
+  if (isoDate(m) === isoDate(info.eingang)) return null;
+  return { date: isoDate(m), time: hhmm(m) };
 }

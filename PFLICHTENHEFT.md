@@ -40,6 +40,9 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Manu wählt einmal einen **Hauptordner** (z. B. `C:\Projekte`). Jeder Unterordner darin ist ein **Projekt** (Auswahlliste).
 - Innerhalb eines Projekts werden Bilder in allen Unterordnern gefunden (rekursiv), außer in versteckten Ordnern (Name beginnt mit `.`).
 - Chrome fragt bei jedem Start einmal nach Erlaubnis für den Ordner (Browser-Vorgabe, nicht abschaltbar).
+- **Neue Dateien erkennen:** Knopf „Aktualisieren“, automatisch 1×/Stunde, beim Zurückwechseln in die App (höchstens alle 5 s) und – wenn Chrome es kann (`FileSystemObserver`) – bei Änderungen im Projektordner. Eigene Schreibvorgänge in `.ordnu/` lösen nichts aus. Verschwundene Dateien erscheinen auf dem Board als „Datei fehlt“.
+- **„Neu“:** Bilder, die bei einer Aktualisierung (nicht beim allerersten Einlesen) gefunden werden – auch beim Öffnen des Projekts, wenn sie bei geschlossener App dazukamen. Gilt als gesehen, sobald das Bild auf irgendeinem Board liegt oder per „Alle als gesehen markieren“.
+- **Ordner/Dateien aus dem Explorer aufs Board ziehen:** nur was im Projekt liegt (ordnu kopiert nie Dateien). Alle Bilder (rekursiv, ohne versteckte Ordner) als Raster um die Ablagestelle, Reihenfolge nach Name. Was im selben Tab schon liegt, wird übersprungen (andere Tabs egal). Hinweis „x neu platziert, y schon auf diesem Board“. Ein Drop = ein Rückgängig-Schritt.
 
 ### 1.2 App-Daten pro Projekt
 ```
@@ -53,6 +56,7 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Speichern automatisch, 1 s nach der letzten Änderung. Die Datei wird erst ersetzt, wenn sie vollständig geschrieben ist (kein Halb-Stand bei Absturz).
 - `ordnu.json` hat eine `version`-Nummer (aktuell 1) für spätere Umstellungen.
 - Bild-Elemente: `x, y, w, h` = sichtbarer Ausschnitt auf dem Board, `ar` = Seitenverhältnis des Originals, `crop = { ox, oy, scale, rot }` = Lage des Bildes im Ausschnitt (relativ zur Ausschnitt-Breite; Drehung in Grad). Ältere Elemente ohne `crop` werden automatisch ergänzt.
+- `files` = je Bildpfad `{ eingang, mtime, neu?, ignoreSuggest? }`, `firstScanDone`, `settings.dateSuggestions` (siehe 1.5).
 - `verlauf.json` fehlt oder ist defekt → leerer Verlauf, die App läuft normal weiter.
 - Bilder werden über ihren **relativen Pfad** im Projekt erkannt. Umbenennen/Verschieben außerhalb der App trennt die Verbindung (Bild erscheint als „fehlt“). Wiederfinden umbenannter Dateien: später (siehe Roadmap).
 
@@ -60,6 +64,14 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Längste Seite 512 px, WebP, Qualität 0,8.
 - Name: Hash aus relativem Pfad + Dateigröße + Änderungsdatum → ändert sich das Original, wird eine neue Vorschau erzeugt.
 - Erzeugung im Hintergrund, Board bleibt bedienbar.
+
+### 1.5 Datum und Tagessortierung
+- Der Browser kennt nur das **Änderungsdatum** einer Datei (kein Erstelldatum).
+- **Eingangsdatum** = Zeitpunkt, an dem ordnu die Datei zuerst sieht (in `files`). Beim allerersten Einlesen eines Projekts ersatzweise das Änderungsdatum.
+- **Tagesordner** mit Namen exakt `JJ.MM.TT` (z. B. `26.11.19` = 19.11.2026; fest so gelesen, nur gültige Kalenderdaten, Jahr 20JJ) haben Vorrang; der nächstgelegene Ordner im Pfad zählt. Tagesordner sind optional.
+- Automatische Werte stehen nicht in den Tags; die Tags `datum`/`uhrzeit` sind **von Hand** gesetzt und haben immer Vorrang (werden nie automatisch überschrieben). Ändern per Rechtsklick auf das Bild in der Bilderliste (Datumsfeld, „Automatisch“ = zurück). Rückgängig-fähig.
+- **Tagessortierung:** Bilderliste nach Tag gruppiert, neueste oben (Überschrift z. B. „Do 19.11.2026“), Filter nach Tag und „Nur neue“.
+- **Korrekturvorschlag:** Ist das Änderungsdatum mehr als 1 Tag älter als das Eingangsdatum, nicht in der Zukunft und höchstens 2 Jahre alt (und kein Tagesordner/kein Datum von Hand), schlägt die App „Dateidatum TT.MM.JJJJ übernehmen?“ vor (Übernehmen = Datum von Hand, Rückgängig-fähig; Ignorieren wird gemerkt). Abschaltbar pro Projekt (Schalter „Datum-Vorschläge“). Manu will das ausprobieren und ggf. wieder abschalten.
 
 ### 1.4 Bildformate
 - V1: was Chrome selbst anzeigen kann – JPG, PNG, WebP, AVIF, GIF, BMP.
@@ -76,10 +88,11 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Bilder platzieren, verschieben, skalieren (Eck-Anfasser, Seitenverhältnis bleibt, Gruppe skaliert gemeinsam, Mindestkante 20)
 - Auswahl: Klick, Umschalt+Klick, Auswahlrahmen (Umschalt = hinzufügen)
 - Vom Board entfernen: `Entf` oder Mülleimer an der Auswahl (Originale werden nie angefasst)
-- Ausschnitt / Bildtransform (nicht-destruktiv): Doppelklick aufs Bild; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
+- Neue Dateien erkennen + „Neu“-Markierung + Filter „Nur neue“; Ordner/Dateien aus dem Projekt aufs Board ziehen; Eingangsdatum, Tagessortierung, Korrekturvorschlag (siehe 1.1 und 1.5) – freigegeben 19.11.
+- Ausschnitt / Bildtransform (nicht-destruktiv): Doppelklick aufs Bild; Enter/Esc/„Fertig“ beendet; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
 - Rahmen: Farbe, Name; Inhalt wandert beim Verschieben mit
 - Notizzettel / Text
-- Tags tippen: Datum (automatisch aus Datei, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
+- Tags tippen: Datum (automatisch, siehe 1.5, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
 - Filter nach Tags
 - Rückgängig/Wiederholen PRO TAB (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y), wirkt nur im aktiven Tab. 200 Schritte je Tab, gilt für Inhalt (Bilder, Ausschnitt, später Rahmen, Notizen, Tags), nicht für Zoom/Ansicht. Tab umbenennen/sortieren/löschen nicht per Strg+Z (Löschen: „Rückgängig“-Hinweis). Verlauf bleibt über Tab-Wechsel und Schließen der App erhalten (`.ordnu/verlauf.json`). Tags hängen am Bild und gelten in allen Tabs; eine Tag-Änderung wird je Feld in dem Tab rückgängig gemacht, in dem sie gemacht wurde – wurde das Feld inzwischen in einem anderen Tab geändert, bleibt die spätere Änderung stehen (mit Hinweis).
 
@@ -88,22 +101,25 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 1b. Rückgängig/Wiederholen – fertig 19.11.
 2. Bilder skalieren, Auswahlrahmen, Mülleimer, Tabs löschen/sortieren, Rückgängig pro Tab mit verlauf.json – fertig 19.11.
 2b. Ausschnitt / Bildtransform – fertig 19.11.
+2c. Neue Dateien erkennen, „Neu“, Ordner reinziehen, Eingangsdatum, Tagessortierung, Korrekturvorschlag – fertig 19.11.
 3. Rahmen
 4. Notizzettel / Text
-5. Tags (Einzel + Mehrfach, Vorschläge, Datum aus Datei)
+5. Tags (Einzel + Mehrfach, Vorschläge; Datum-Datenebene steht schon)
 6. Filter
 
 ### V1b (Vorschlag, Freigabe offen)
 - Spracheingabe für Tags: Whisper offline, Push-to-talk, feste Schlüsselwörter („Datum 18. November, von …, Shot …, Variante B, Version 3“). Tippen geht immer.
 - Modellgröße vs. GitHub-Grenzen prüfen (geschätzt 75–150 MB; GitHub-Grenze pro Datei 100 MB).
 
-### V2 (Roadmap-Vorschlag, Reihenfolge nach Abhängigkeit)
-1. V2.0 Collections (virtuelle, verschachtelbare Sammlungen – Basis für Präsentation)
-2. V2.1 „Neueste Variante je Shot“ + Zeitleiste
-3. V2.2 Vergleich (nebeneinander / Schieberegler)
-4. V2.3 Präsentationsmodus (aus Collections)
-5. V2.4 Pfeile
-6. V2.5 Sprachbefehle fürs Board (baut auf V1b)
+### V2 (Roadmap, Reihenfolge 19.11. neu festgelegt)
+1. V2.0 Dateinamen-Schema pro Projekt einstellbar (Anlieferungen sind anfangs chaotisch benannt; ggf. mehrere Schemata je Absender) → Shot/Version/Variante automatisch als Tags; Rest wird von Hand getaggt
+2. V2.1 Rahmen mit Regeln = automatisch einsortieren (z. B. Shot = SH010; neue passende Bilder landen dort, neueste Version vorne) + „neueste Variante je Shot“ – **Top-Priorität**
+3. V2.2 Collections (virtuelle, verschachtelbare Sammlungen – Basis für Präsentation)
+4. V2.3 Zeitleiste
+5. V2.4 Vergleich (nebeneinander / Schieberegler)
+6. V2.5 Präsentationsmodus (aus Collections)
+7. V2.6 Pfeile
+8. V2.7 Sprachbefehle fürs Board (baut auf V1b)
 
 ### V3 (Idee, vorgemerkt)
 - Nutzung bleibt am Rechner (Laptop/ggf. Workstation), kein volles Board am Handy.
@@ -130,7 +146,10 @@ Zeichnen, Formen-Bibliothek, Vorlagen, Zusammenarbeit.
 | Skalieren | Eck-Anfasser der Auswahl ziehen |
 | Löschen vom Board | `Entf` oder Mülleimer – entfernt nur vom Board, nie die Datei |
 | Rückgängig / Wiederholen | Strg+Z / Strg+Umschalt+Z (oder Strg+Y) – nur im aktiven Tab |
-| Ausschnitt | Doppelklick aufs Bild; Kanten ziehen = Ausschnitt, im Bild ziehen = verschieben, runde gelbe Anfasser = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), Esc/Klick daneben = fertig |
+| Ausschnitt | Doppelklick aufs Bild; Kanten ziehen = Ausschnitt, im Bild ziehen = verschieben, runde gelbe Anfasser = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), Enter/Esc/Klick daneben = fertig |
+| Neue Bilder | „Aktualisieren“ (sonst automatisch: beim Zurückwechseln, stündlich); „Nur neue“, „Alle als gesehen markieren“ |
+| Ordner aufs Board | Ordner oder Bilder aus dem Projekt im Explorer packen und aufs Board ziehen |
+| Datum | Rechtsklick auf ein Bild in der Bilderliste; Vorschläge „Übernehmen/Ignorieren“; Schalter „Datum-Vorschläge“ |
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen (mit Rückfrage) |
 
 ---

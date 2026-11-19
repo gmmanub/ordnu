@@ -21,8 +21,13 @@ App: https://gmmanub.github.io/ordnu/
 | Skalieren | Ecken der Auswahl ziehen |
 | Vom Board entfernen | `Entf` oder Mülleimer (die Datei bleibt erhalten) |
 | Rückgängig / Wiederholen | `Strg+Z` / `Strg+Umschalt+Z` – je Tab, bleibt auch nach dem Schließen erhalten |
-| Ausschnitt / Bildtransform | Doppelklick aufs Bild: Kanten ziehen, Bild verschieben, gelbe Punkte = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), `Esc` = fertig |
+| Ausschnitt / Bildtransform | Doppelklick aufs Bild: Kanten ziehen, Bild verschieben, gelbe Punkte = größer/kleiner, weißer Kreis = drehen (Umschalt: 15°), `Enter`/`Esc` = fertig |
+| Neue Bilder suchen | „⟳ Aktualisieren“ (passiert auch automatisch beim Zurückwechseln und stündlich) |
+| Ordner aufs Board | Ordner aus dem Projekt im Explorer packen und aufs Board ziehen – Bilder, die schon im Tab liegen, werden übersprungen |
+| Datum ändern | Rechtsklick auf ein Bild in der Bilderliste |
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen |
+
+Die Bilderliste ist nach Tagen sortiert (Eingangsdatum: wann ordnu die Datei zuerst gesehen hat; Tagesordner im Format `JJ.MM.TT` haben Vorrang). Neue Bilder sind mit „Neu“ markiert.
 
 Gespeichert wird automatisch in `<Projekt>/.ordnu/` (Boards, Tags, Vorschaubilder, Verlauf).
 Die eigenen Bilder werden nie verändert, verschoben oder gelöscht.

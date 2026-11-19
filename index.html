@@ -55,7 +55,14 @@
           <strong>Bilder</strong>
           <span id="image-count" class="muted small"></span>
         </div>
-        <p class="muted small">Klick oder Ziehen legt ein Bild aufs Board. Doppelklick auf ein Bild: Ausschnitt.</p>
+        <div class="sidebar-tools">
+          <button id="btn-rescan" title="Projektordner nach neuen Bildern durchsuchen">⟳ Aktualisieren</button>
+          <select id="filter-day" title="Nach Tag filtern"><option value="">Alle Tage</option></select>
+          <label class="check small"><input type="checkbox" id="filter-new"> <span>Nur neue (<span id="new-count">0</span>)</span></label>
+          <button id="btn-seen" class="small" title="Alle Neu-Markierungen entfernen">Alle als gesehen markieren</button>
+          <label class="check small" title="Vorschlag, wenn das Dateidatum deutlich älter ist als das Eingangsdatum"><input type="checkbox" id="opt-suggest" checked> Datum-Vorschläge</label>
+        </div>
+        <p class="muted small">Klick oder Ziehen legt ein Bild aufs Board. Ordner aus dem Projekt auch aus dem Explorer aufs Board ziehen. Rechtsklick: Datum ändern.</p>
         <ul id="image-list" class="image-list"></ul>
       </aside>
       <div id="viewport" class="viewport" tabindex="0">

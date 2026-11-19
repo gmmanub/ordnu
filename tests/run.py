@@ -99,8 +99,8 @@ def main():
         check(True, "Vorschaubilder erzeugt")
 
         print("Bilder platzieren")
-        page.click("#image-list li:nth-child(1)")
-        page.click("#image-list li:nth-child(2)")
+        page.click('#image-list li.tile[data-path="Anlieferung/test_motiv_c_v2.jpg"]')
+        page.click('#image-list li.tile[data-path="test_motiv_a.jpg"]')
         page.wait_for_function("document.querySelectorAll('#world .item').length === 2")
         check(True, "2 Bilder per Klick aufs Board gelegt")
         page.wait_for_function("document.querySelectorAll('#world .item img').length === 2")
@@ -147,7 +147,7 @@ def main():
         page.keyboard.press("Enter")
         check(labels() == ["Board", "Moods"], f"Tab angelegt und umbenannt: {labels()}")
         check(count() == 0, "Neuer Tab ist leer")
-        page.click("#image-list li:nth-child(3)")
+        page.click('#image-list li.tile[data-path="test_motiv_b.png"]')
         page.wait_for_function("document.querySelectorAll('#world .item').length === 1")
         page.click("#tabs .tab >> nth=0")
         check(count() == 2, "Zurück im ersten Tab: 2 Bilder")
@@ -229,7 +229,7 @@ def main():
         print("Skalieren, Auswahlrahmen, Mülleimer")
         ev("B.view = { x: 0, y: 0, scale: 1 }; B.applyView(); return true;")
         ev("const c = d.items.find(i => i.tab === d.activeTab); c.x = 300; c.y = 200; B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); return true;")
-        page.click("#image-list li:nth-child(2)")  # Motiv A dazu, ist danach ausgewählt
+        page.click('#image-list li.tile[data-path="test_motiv_a.jpg"]')  # Motiv A dazu, ist danach ausgewählt
         page.wait_for_function("document.querySelectorAll('#world .item img').length === 2")
         ev("const a = d.items.find(i => i.tab === d.activeTab && i.path === 'test_motiv_a.jpg'); a.x = 750; a.y = 220; B.replaceItems(d.items.filter(i => i.tab === d.activeTab)); B.setSelection([a.id]); return true;")
         a0 = ev("return { ...d.items.find(i => i.tab === d.activeTab && i.path === 'test_motiv_a.jpg') };")
@@ -324,6 +324,11 @@ def main():
         check(und["cropping"], "Ausschnitt-Modus bleibt beim Rückgängigmachen offen")
         page.keyboard.press("Escape")
         check(not page.is_visible(".crop-bar") and page.locator("#world .item.cropping").count() == 0, "Esc beendet Ausschnitt-Modus")
+        cx, cy = center("#world .item")
+        page.mouse.dblclick(cx, cy)
+        page.wait_for_selector(".crop-bar", state="visible")
+        page.keyboard.press("Enter")
+        check(not page.is_visible(".crop-bar") and page.locator("#world .item.cropping").count() == 0, "Enter beendet Ausschnitt-Modus")
         page.screenshot(path=os.path.join(OUT, "05_nach_ausschnitt.png"))
         old = ev("return M.normalizeData({ version: 1, tabs: [{ id: 't', name: 'Alt' }], activeTab: 't', items: [{ id: 'x', tab: 't', type: 'image', path: 'a.jpg', x: 0, y: 0, w: 200, h: 100 }] }).items[0];")
         check(old["crop"] == {"ox": 0, "oy": 0, "scale": 1, "rot": 0} and old["ar"] == 0.5, "Ältere Elemente ohne Ausschnitt werden übernommen")
@@ -425,6 +430,172 @@ def main():
                    toast: document.getElementById('toast').textContent };
         }""")
         check(notice["items"] == 1 and notice["defekt"], f"Sicherung geladen, defekte Datei aufgehoben: {notice}")
+
+        print("Datum-Regeln (Datenmodell)")
+        r = ev("""return {
+          a: M.parseDayFolder('26.11.19'), b: M.parseDayFolder('26.02.30'), c: M.parseDayFolder('26.13.01'),
+          e: M.parseDayFolder('2026.11.19'), f: M.parseDayFolder('26.11.1'), g: M.parseDayFolder('19.11.26'),
+          h: M.dayFolderDate('x/26.11.19/y/26.11.18/bild.jpg'), i: M.dayFolderDate('26.11.19.jpg'),
+          j: M.formatDay('2026-11-19') };""")
+        check(r["a"] == "2026-11-19", "Tagesordner 26.11.19 = 19.11.2026 (JJ.MM.TT)")
+        check(r["b"] is None and r["c"] is None and r["e"] is None and r["f"] is None, "Ungültige/andere Formate werden ignoriert")
+        check(r["g"] == "2019-11-26", "19.11.26 wird fest als JJ.MM.TT gelesen (26.11.2019)")
+        check(r["h"] == "2026-11-18" and r["i"] is None, "Nächstgelegener Tagesordner zählt, Dateiname nicht")
+        check(r["j"] == "Do 19.11.2026", f"Überschrift mit Wochentag: {r['j']}")
+
+        print("Neue Dateien, Ordner ablegen, Eingangsdatum")
+        DUMMY = """
+          const opfs = await navigator.storage.getDirectory();
+          const root = await opfs.getDirectoryHandle('testroot');
+          const proj = await root.getDirectoryHandle('Projekt Sonnendeck', { create: true });
+          async function dir(path) { let h = proj; for (const p of path.split('/').filter(Boolean)) h = await h.getDirectoryHandle(p, { create: true }); return h; }
+          async function dummy(path, color) {
+            const parts = path.split('/'); const name = parts.pop(); const d = await dir(parts.join('/'));
+            const c = new OffscreenCanvas(400, 300); const g = c.getContext('2d'); g.fillStyle = color || '#555'; g.fillRect(0, 0, 400, 300);
+            const blob = await c.convertToBlob({ type: 'image/jpeg' });
+            const w = await (await d.getFileHandle(name, { create: true })).createWritable(); await w.write(blob); await w.close();
+          }
+        """
+        def evd(body):
+            return ev(DUMMY + body)
+
+        evd("await dummy('alt_x.jpg', '#884'); await dummy('Archiv/alt_y.jpg', '#488');")
+        first = ev("""await app.flushAll(); await app.openProject('Projekt Sonnendeck'); const d2 = app.state.data;
+          return { first: d2.firstScanDone, files: Object.keys(d2.files).sort(), neu: Object.values(d2.files).filter(f => f.neu).length,
+                   eqm: Object.values(d2.files).every(f => f.eingang === f.mtime) };""")
+        check(first["first"] and first["files"] == ["Archiv/alt_y.jpg", "alt_x.jpg"], f"Erst-Einlesen merkt sich die Dateien: {first['files']}")
+        check(first["neu"] == 0 and first["eqm"], "Erst-Einlesen: nichts „Neu“, Eingangsdatum = Dateidatum")
+
+        evd("await dummy('Lieferung A/26.11.12/neu_a.jpg'); await dummy('neu_b.jpg'); await dummy('26.13.40/neu_c.jpg'); await dummy('.versteckt/geheim.jpg');")
+        page.click("#btn-rescan")
+        page.wait_for_function("document.querySelectorAll('#image-list li.tile').length === 5")
+        st = ev("""const d2 = app.state.data; const today = M.isoDate(Date.now());
+          const eff = p => M.effectiveDate(p, d2.files[p], d2.tags[p]);
+          return { neu: Object.entries(d2.files).filter(([, f]) => f.neu).map(([p]) => p).sort(),
+                   badge: document.querySelectorAll('#image-list .badge-new').length, count: document.getElementById('new-count').textContent,
+                   a: eff('Lieferung A/26.11.12/neu_a.jpg'), c: eff('26.13.40/neu_c.jpg'), b: eff('neu_b.jpg'), today,
+                   heads: [...document.querySelectorAll('#image-list li.group-head')].map(h => h.textContent),
+                   toast: document.getElementById('toast').textContent };""")
+        check(st["neu"] == ["26.13.40/neu_c.jpg", "Lieferung A/26.11.12/neu_a.jpg", "neu_b.jpg"], f"Aktualisieren findet 3 neue Bilder (nicht versteckte): {st['neu']}")
+        check(st["badge"] == 3 and st["count"] == "3", "„Neu“-Markierung und Zähler")
+        check("3 neue Bilder" in st["toast"], f"Hinweis nach Aktualisieren: {st['toast']}")
+        check(st["a"]["date"] == "2026-11-12" and st["a"]["source"] == "ordner", "Tagesordner hat Vorrang vor Eingang")
+        check(st["c"]["date"] == st["today"] and st["c"]["source"] == "eingang", "Ungültiger Tagesordner → Eingangsdatum")
+        check(st["b"]["date"] == st["today"] and st["b"]["time"] is not None, "Neue Datei: Eingangsdatum + Uhrzeit = jetzt")
+        check(len(st["heads"]) == 2 and st["heads"][-1] == "Do 12.11.2026", f"Bilderliste nach Tagen gruppiert, neueste oben: {st['heads']}")
+        page.screenshot(path=os.path.join(OUT, "06_bilderliste_tage.png"))
+
+        page.check("#filter-new")
+        check(page.locator("#image-list li.tile").count() == 3, "Filter „Nur neue“ zeigt 3 Bilder")
+        page.uncheck("#filter-new")
+        page.select_option("#filter-day", "2026-11-12")
+        check(page.locator("#image-list li.tile").count() == 1, "Filter nach Tag zeigt nur 12.11.2026")
+        page.select_option("#filter-day", "")
+        check(page.locator("#image-list li.tile").count() == 5, "Filter zurück: alle Bilder")
+
+        page.click('#image-list li.tile[data-path="neu_b.jpg"]')
+        page.wait_for_function("document.getElementById('new-count').textContent === '2'")
+        check(True, "Auf dem Board platziert → gilt als gesehen")
+        page.click("#btn-seen")
+        check(ev("return Object.values(app.state.data.files).filter(f => f.neu).length;") == 0 and page.locator("#image-list .badge-new").count() == 0,
+              "„Alle als gesehen markieren“")
+
+        # Zurückwechseln in die App löst Aktualisieren aus
+        evd("await dummy('neu_fokus.jpg');")
+        ev("app.state.lastScan = 0; window.dispatchEvent(new Event('focus'));")
+        page.wait_for_function("document.querySelector('#image-list li.tile[data-path=\"neu_fokus.jpg\"]') !== null", timeout=5000)
+        check(True, "Beim Zurückwechseln in die App wird automatisch aktualisiert")
+        fso = ev("return typeof window.FileSystemObserver === 'function';")
+        print(f"  info FileSystemObserver im Test-Chrome vorhanden: {fso}")
+
+        # Ordner ablegen (Handles wie beim Ziehen aus dem Explorer)
+        evd("await dummy('Lieferung B/l1.jpg'); await dummy('Lieferung B/l2.jpg'); await dummy('Lieferung B/l3.jpg'); await dummy('Lieferung B/Unter/l4.jpg'); await dummy('Lieferung B/.tmp/x.jpg');")
+        ev("await app.rescan({ quiet: true }); await app.placeImage('Lieferung B/l1.jpg', 2000, 2000);")
+        before = ev("return app.state.data.items.filter(i => i.tab === app.state.data.activeTab).length;")
+        drop = evd("""const h = await proj.getDirectoryHandle('Lieferung B');
+          const res = await app.dropHandles([Promise.resolve(h)], 0, 0);
+          const d2 = app.state.data; const items = d2.items.filter(i => i.tab === d2.activeTab);
+          const placed = items.slice(-3).map(i => ({ path: i.path, x: i.x, y: i.y }));
+          return { res, n: items.length, placed, toast: document.getElementById('toast').textContent };""")
+        check(drop["res"] == {"placed": 3, "skipped": 1, "outside": 0}, f"Ordner ablegen: 3 neu, 1 schon da: {drop['res']}")
+        check(drop["n"] == before + 3, "Versteckte Unterordner werden nicht übernommen")
+        check([p["path"] for p in drop["placed"]] == ["Lieferung B/l2.jpg", "Lieferung B/l3.jpg", "Lieferung B/Unter/l4.jpg"], f"Reihenfolge nach Name: {[p['path'] for p in drop['placed']]}")
+        xs = sorted({p["x"] for p in drop["placed"]}); ys = sorted({p["y"] for p in drop["placed"]})
+        check(len(xs) == 2 and len(ys) == 2, f"Als Raster abgelegt (2 Spalten, 2 Reihen): x={xs} y={ys}")
+        check("3 neu platziert, 1 schon auf diesem Board" in drop["toast"], f"Hinweis: {drop['toast']}")
+        und = ev("""const t = () => app.state.data.items.filter(i => i.tab === app.state.data.activeTab).length;
+          const a = t(); app.undo(); const b = t(); app.redo(); return { a, b, c: t() };""")
+        check(und["b"] == und["a"] - 3 and und["c"] == und["a"], "Ganzer Ordner-Drop = ein Rückgängig-Schritt")
+
+        again = evd("""const h = await proj.getDirectoryHandle('Lieferung B'); return app.dropHandles([h], 0, 0);""")
+        check(again == {"placed": 0, "skipped": 4, "outside": 0}, f"Zweites Ablegen im selben Tab: alles übersprungen: {again}")
+        other = evd("""const d2 = app.state.data; const tab = M.createTab('Zweiter'); d2.tabs.push(tab); app.switchTab(tab.id);
+          const h = await proj.getDirectoryHandle('Lieferung B'); return app.dropHandles([h], 0, 0);""")
+        check(other == {"placed": 4, "skipped": 0, "outside": 0}, f"In einem anderen Tab erlaubt: {other}")
+        single = evd("""const h = await proj.getFileHandle('alt_x.jpg'); return app.dropHandles([h], 500, 0);""")
+        check(single == {"placed": 1, "skipped": 0, "outside": 0}, "Einzelne Bilddatei aus dem Projekt ablegen")
+        outside = evd("""const other = await root.getDirectoryHandle('Projekt Apfelbaum');
+          const f = await other.getFileHandle('test_motiv_a.jpg');
+          const n = app.state.data.items.length;
+          const res = await app.dropHandles([other, f], 0, 0);
+          return { res, same: app.state.data.items.length === n, toast: document.getElementById('toast').textContent };""")
+        check(outside["res"] == {"placed": 0, "skipped": 0, "outside": 2} and outside["same"], f"Außerhalb des Projekts: nichts übernommen: {outside['res']}")
+        check("kopiert keine Dateien" in outside["toast"], "Hinweis bei Ordnern außerhalb des Projekts")
+        late = evd("""await dummy('Lieferung C/spaet.jpg'); const h = await proj.getDirectoryHandle('Lieferung C');
+          return app.dropHandles([h], 0, 900);""")
+        check(late["placed"] == 1, "Ablegen eines noch nicht eingelesenen Ordners liest ihn automatisch ein")
+
+        # Korrekturvorschlag
+        sug = ev("""const d2 = app.state.data; const now = Date.now();
+          d2.files['neu_b.jpg'].mtime = now - 10 * 864e5; d2.files['neu_fokus.jpg'].mtime = now - 5 * 864e5;
+          d2.files['26.13.40/neu_c.jpg'].mtime = now - 3 * 365 * 864e5;
+          d2.files['Lieferung A/26.11.12/neu_a.jpg'].mtime = now - 10 * 864e5;
+          d2.files['Lieferung B/l1.jpg'].mtime = now + 5 * 864e5;
+          app.renderImageList();
+          return [...document.querySelectorAll('#image-list li.suggest')].map(l => l.dataset.path).sort();""")
+        check(sug == ["neu_b.jpg", "neu_fokus.jpg"], f"Vorschlag nur bei plausibel älterem Dateidatum (nicht >2 Jahre, nicht Zukunft, nicht Tagesordner): {sug}")
+        page.uncheck("#opt-suggest")
+        off = ev("return { n: document.querySelectorAll('#image-list li.suggest').length, s: app.state.data.settings.dateSuggestions };")
+        check(off == {"n": 0, "s": False}, "Vorschläge abschaltbar (Einstellung pro Projekt)")
+        page.check("#opt-suggest")
+        check(page.locator("#image-list li.suggest").count() == 2, "Vorschläge wieder an")
+        page.click('#image-list li.suggest[data-path="neu_fokus.jpg"] .suggest-no')
+        ign = ev("return { n: document.querySelectorAll('#image-list li.suggest').length, f: app.state.data.files['neu_fokus.jpg'].ignoreSuggest };")
+        check(ign == {"n": 1, "f": True}, "Ignorieren merkt sich das")
+        expected = ev("return M.isoDate(app.state.data.files['neu_b.jpg'].mtime);")
+        page.click('#image-list li.suggest[data-path="neu_b.jpg"] .suggest-ok')
+        acc = ev("""const p = 'neu_b.jpg'; const d2 = app.state.data;
+          return { tags: d2.tags[p], eff: M.effectiveDate(p, d2.files[p], d2.tags[p]), n: document.querySelectorAll('#image-list li.suggest').length };""")
+        check(acc["tags"]["datum"] == expected and acc["eff"]["source"] == "hand" and acc["n"] == 0, f"Übernehmen setzt das Datum von Hand: {acc['tags']}")
+        u2 = ev("""app.undo(); const a = app.state.data.tags['neu_b.jpg']; app.redo(); return { a: a || null, b: app.state.data.tags['neu_b.jpg'] };""")
+        check(u2["a"] is None and u2["b"]["datum"] == expected, "Übernehmen ist ein Rückgängig-Schritt")
+        keep = ev("""await app.rescan({ quiet: true }); app.state.data.files['neu_b.jpg'].eingang = Date.now();
+          await app.rescan({ quiet: true }); const p = 'neu_b.jpg'; const d2 = app.state.data;
+          return M.effectiveDate(p, d2.files[p], d2.tags[p]);""")
+        check(keep["date"] == expected and keep["manual"], "Von Hand gesetztes Datum wird nie automatisch überschrieben")
+        man = ev("""app.setManualDate('alt_x.jpg', '2026-03-04', '09:15'); const d2 = app.state.data;
+          const a = M.effectiveDate('alt_x.jpg', d2.files['alt_x.jpg'], d2.tags['alt_x.jpg']);
+          app.setManualDate('alt_x.jpg', null); const b = M.effectiveDate('alt_x.jpg', d2.files['alt_x.jpg'], d2.tags['alt_x.jpg']);
+          return { a, b };""")
+        check(man["a"]["date"] == "2026-03-04" and man["a"]["time"] == "09:15" and man["b"]["source"] == "eingang", "Datum von Hand setzen und zurück auf automatisch")
+        page.click('#image-list li.tile[data-path="alt_x.jpg"]', button="right")
+        check(page.locator("#image-list li.date-edit input[type=date]").count() == 1, "Rechtsklick öffnet Datumsfeld")
+        page.click('#image-list li.tile[data-path="alt_x.jpg"]', button="right")
+
+        print("Neu seit dem letzten Öffnen + Speichern")
+        evd("await dummy('zwischendurch.jpg');")
+        reo = ev("""await app.flushAll(); const r = await app.openProject('Projekt Sonnendeck'); const d2 = app.state.data;
+          return { r, neu: d2.files['zwischendurch.jpg'] && d2.files['zwischendurch.jpg'].neu === true };""")
+        check(reo["r"]["added"] == 1 and reo["neu"], f"Datei, die bei geschlossener App kam, ist beim Öffnen „Neu“: {reo['r']}")
+        saved = ev("""await app.flushAll(); const opfs = await navigator.storage.getDirectory();
+          const a = await (await (await opfs.getDirectoryHandle('testroot')).getDirectoryHandle('Projekt Sonnendeck')).getDirectoryHandle('.ordnu');
+          const j = JSON.parse(await (await (await a.getFileHandle('ordnu.json')).getFile()).text());
+          return { first: j.firstScanDone, n: Object.keys(j.files).length, s: j.settings, ign: j.files['neu_fokus.jpg'].ignoreSuggest };""")
+        check(saved["first"] and saved["n"] == 12 and saved["s"]["dateSuggestions"] is True and saved["ign"], f"In ordnu.json gespeichert: {saved}")
+        files_after = evd("""const names = []; for await (const [n] of proj.entries()) names.push(n); return names.sort();""")
+        check(files_after == [".ordnu", ".versteckt", "26.13.40", "Archiv", "Lieferung A", "Lieferung B", "Lieferung C", "alt_x.jpg", "neu_b.jpg", "neu_fokus.jpg", "zwischendurch.jpg"],
+              f"Projektordner: nur .ordnu/ von der App angelegt: {files_after}")
+        page.screenshot(path=os.path.join(OUT, "07_sonnendeck.png"))
 
         print("Sicherheitssperre (eigenes Fenster, Sperre aktiv)")
         ctx_csp = browser.new_context()

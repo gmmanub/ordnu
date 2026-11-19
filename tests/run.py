@@ -1004,9 +1004,9 @@ def main():
         page.wait_for_timeout(50)
         piv = ev("const p = document.querySelector('.overlay .pivot'); return p ? { snap: p.dataset.snap, cls: p.className } : null;")
         pct = page.text_content(".overlay .scale-pct") if page.locator(".overlay .scale-pct").count() else ""
-        page.screenshot(path=os.path.join(OUT, "13_fadenkreuz.png"), clip={"x": vpb["x"], "y": vpb["y"], "width": 700, "height": 450})
         for _ in range(4):
-            page.wait_for_timeout(400); page.mouse.wheel(0, -100)
+            page.wait_for_timeout(300); page.mouse.wheel(0, -100)
+        page.screenshot(path=os.path.join(OUT, "13_fadenkreuz.png"), clip={"x": vpb["x"], "y": vpb["y"], "width": 700, "height": 450})
         page.keyboard.up("Alt")
         a1 = by("alt_x.jpg")
         k_slow = a1["w"] / ax_["w"]

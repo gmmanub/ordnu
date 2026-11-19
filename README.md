@@ -16,7 +16,9 @@ App: https://gmmanub.github.io/ordnu/
 |---|---|
 | Fläche verschieben | Leertaste + Ziehen, mittlere oder rechte Maustaste |
 | Zoomen | Mausrad / Touchpad-Pinch |
-| Alles zeigen | `F` |
+| Alles zeigen | `A` |
+| Auf Auswahl springen | `F` |
+| Zoom 100 % | `0` oder Klick auf die Zoom-Anzeige |
 | Mehrere auswählen | Umschalt + Klick oder Rahmen auf leerer Fläche aufziehen |
 | Skalieren | Ecken der Auswahl ziehen |
 | Vom Board entfernen | `Entf` oder Mülleimer (die Datei bleibt erhalten) |
@@ -28,6 +30,9 @@ App: https://gmmanub.github.io/ordnu/
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen |
 | Rahmen anlegen | „▢ Rahmen“ oder `R`, dann aufziehen · um eine Auswahl: `Strg+G` |
 | Rahmen bearbeiten | Beschriftung/Rand ziehen = mit Inhalt verschieben · Doppelklick auf Beschriftung = umbenennen · Ecken = Größe · Farbpunkte · `Entf` löscht nur den Rahmen |
+| Notizzettel | „▤ Zettel“ oder `N`, dann aufs Board klicken und tippen · `Esc` = fertig · Doppelklick = bearbeiten |
+| Freier Text | „T Text“ oder `T`, dann aufs Board klicken und tippen |
+| Zettel/Text gestalten | Auswahl-Leiste: Hintergrund, Textfarbe, Größe S/M/L/XL |
 
 Die Bilderliste ist nach Tagen sortiert (Eingangsdatum: wann ordnu die Datei zuerst gesehen hat; Tagesordner im Format `JJ.MM.TT` haben Vorrang). Neue Bilder sind mit „Neu“ markiert.
 

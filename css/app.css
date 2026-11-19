@@ -185,3 +185,25 @@ button.danger { background: var(--warn); border-color: var(--warn); color: #1b1c
 .overlay .sel-bar button.color-dot { width: 16px; height: 16px; padding: 0; border-radius: 50%;
   background: var(--dot); border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line); }
 .overlay .sel-bar button.color-dot:hover { box-shadow: 0 0 0 1px #fff; }
+
+/* Notizzettel / Text (Bau-Schritt 4) */
+.item.note, .item.text { overflow: hidden; line-height: 1.3; color: var(--tc); }
+.item.note { background: var(--bg); border-radius: 3px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.45); }
+.item.text { background: transparent; }
+.note-body, .note-edit { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: inherit; line-height: inherit; }
+.item.note .note-body, .item.note .note-edit { padding: 0.5em 0.6em; }
+.item.text .note-body, .item.text .note-edit { padding: 0.05em 0.1em; }
+.note-body { min-height: 1.3em; }
+.note-edit { display: block; width: 100%; height: 100%; margin: 0; border: 0; outline: none; resize: none;
+  background: transparent; overflow: hidden; }
+.item.text.empty { outline: 1px dashed var(--muted); }
+.viewport.tool-note { cursor: crosshair; }
+.viewport.tool-note .item { cursor: crosshair; }
+.note-controls { display: flex; gap: 8px; align-items: center; }
+.ctl-group { display: flex; gap: 3px; align-items: center; }
+.ctl-title { font-size: 11px; color: var(--muted); margin-right: 2px; }
+.overlay .sel-bar button.color-dot.on { box-shadow: 0 0 0 2px var(--select); }
+.overlay .sel-bar .fs button { min-width: 26px; }
+.overlay .sel-bar .fs button.on { border-color: var(--select); color: var(--select); }
+.zoom-label { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 2px 6px; }
+.zoom-label:hover { border-color: var(--line); color: var(--text); }

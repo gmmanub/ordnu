@@ -48,7 +48,7 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 ```
 <Projekt>/
   .ordnu/
-    ordnu.json          Boards, Positionen, Rahmen, Notizen, Tags
+    ordnu.json          Boards, Positionen, Rahmen, Notizzettel/Text, Tags
     ordnu.backup.json   Kopie des Stands beim Öffnen des Projekts
     verlauf.json        Rückgängig-Verlauf je Tab (nur Unterschiede, 3 s nach Änderung gespeichert)
     vorschau/           Vorschaubilder (von der App erzeugt)
@@ -91,7 +91,8 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 - Neue Dateien erkennen + „Neu“-Markierung + Filter „Nur neue“; Ordner/Dateien aus dem Projekt aufs Board ziehen; Eingangsdatum, Tagessortierung, Korrekturvorschlag (siehe 1.1 und 1.5) – freigegeben 19.11.
 - Ausschnitt / Bildtransform (nicht-destruktiv): Doppelklick aufs Bild; Enter/Esc/„Fertig“ beendet; Ausschnitt-Kanten ziehen, Bild im Ausschnitt verschieben, per Anfasser größer/kleiner (kein Mausrad), drehen per rundem Anfasser (Umschalt = 15°-Schritte), Knöpfe „90°“ und „Zurücksetzen“. Kein Drehen des ganzen Bildes auf dem Board. Gezoomte Ausschnitte nutzen das Original.
 - Rahmen (fertig 19.11.): aufziehen (Knopf „Rahmen“ / Taste R; Klick ohne Ziehen = 480×320) oder „Rahmen um Auswahl“ (Knopf in der Auswahl-Leiste / Strg+G, 40 Rand). Farbiger Rand + leicht transparente Füllung, Palette mit 8 Farben + Standard (Ocker, Blau, Salbei, Rost, Lavendel, Petrol, Rosé, Schiefer). Name als Beschriftung oben links in Rahmenfarbe, nach dem Anlegen gleich bearbeitbar, sonst Doppelklick auf Beschriftung/Rand (Enter/Esc); Beschriftung und Linie bleiben auf dem Bildschirm gleich groß (bei kleinem Zoom lesbar). Rahmen liegen immer hinter Bildern (große hinter kleinen). Klick auf Beschriftung oder Rand wählt den Rahmen, Klick ins leere Innere startet den Auswahlrahmen; der Auswahlrahmen erfasst Rahmen nur, wenn sie komplett umschlossen sind. Verschieben nimmt den Inhalt mit (Elemente, deren Mittelpunkt bei Beginn im Rahmen liegt; andere Rahmen nur, wenn komplett darin – verschachtelt). Skalieren per Anfasser: nur der Rahmen, Seitenverhältnis frei, Inhalt bleibt stehen. Farbe per Farbpunkten in der Auswahl-Leiste (auch mehrere). Löschen entfernt nur den Rahmen, der Inhalt bleibt. Alles rückgängig machbar (Verschieben mit Inhalt = 1 Schritt). Gespeichert als Element `type: 'frame'` mit `name`, `color`, `rule` (`rule` = null, Platz für V2 Einsortieren).
-- Notizzettel / Text (Bau-Schritt 4): Hintergrundfarbe der Notizzettel UND Textfarbe einstellbar (Palette), Schriftgröße einstellbar; freier Text ebenfalls mit Farbe.
+- Notizzettel / Text (fertig 19.11.): Knopf „Zettel“ / Taste N bzw. „Text“ / Taste T, dann Klick aufs Board → Element entsteht mittig am Klickpunkt, Text sofort editierbar (Enter = neue Zeile, Esc oder Klick daneben = fertig; Doppelklick = wieder bearbeiten). Zettel 200×200, Standard gelb mit schwarzer Schrift M (20); freier Text ohne Hintergrund, weiße Schrift L (32), Höhe passt sich dem Text an, leerer neuer Text wird verworfen. Auswahl-Leiste: Zettel-Hintergrund (10 Farben: Gelb, Orange, Rosa, Mint, Himmel, Flieder, Weiß, Ocker, Petrol, Dunkel), Textfarbe (10: Schwarz, Weiß, Grau + Rahmen-Akzente), Größe S/M/L/XL (14/20/32/48) – auch für Mehrfachauswahl. Größe per Anfasser frei (Schrift bleibt); zusammen mit Bildern skaliert, wächst die Schrift mit. Ebenen: Rahmen hinten, dann Bilder, Notizen/Text vorn; wandern mit Rahmen mit. Anlegen + erster Text = 1 Rückgängig-Schritt, jede Bearbeitung/Farbe/Größe/Verschieben/Löschen ebenso. Gespeichert als `type: 'note'` { text, bg, color, fontSize } bzw. `type: 'text'` { text, color, fontSize }; Text ist reiner Text (Anzeige nie als HTML).
+- Ansichts-Tasten (fertig 19.11.): `A` = alles zeigen, `F` = auf die Auswahl springen (ohne Auswahl wie A, höchstens 400 %), `0` = Zoom 100 % (Bildmitte bleibt), Klick auf die Zoom-Anzeige = 100 %. Sanft animiert (250 ms), keine Rückgängig-Schritte, wirken nicht beim Tippen oder mit Strg/Alt.
 - Tags tippen: Datum (automatisch, siehe 1.5, korrigierbar), Uhrzeit, Absender, Shot, Variante, Version, freie Tags. Mehrere Bilder gleichzeitig taggen, Vorschläge aus vorhandenen Tags.
 - Filter nach Tags
 - Rückgängig/Wiederholen PRO TAB (freigegeben 19.11.): Strg+Z / Strg+Umschalt+Z (zusätzlich Strg+Y), wirkt nur im aktiven Tab. 200 Schritte je Tab, gilt für Inhalt (Bilder, Ausschnitt, Rahmen, später Notizen, Tags), nicht für Zoom/Ansicht. Tab umbenennen/sortieren/löschen nicht per Strg+Z (Löschen: „Rückgängig“-Hinweis). Verlauf bleibt über Tab-Wechsel und Schließen der App erhalten (`.ordnu/verlauf.json`). Tags hängen am Bild und gelten in allen Tabs; eine Tag-Änderung wird je Feld in dem Tab rückgängig gemacht, in dem sie gemacht wurde – wurde das Feld inzwischen in einem anderen Tab geändert, bleibt die spätere Änderung stehen (mit Hinweis).
@@ -103,7 +104,7 @@ Lokale Bilder-Board-App (Miro-artig) für vertrauliche Projektbilder. Laptop zue
 2b. Ausschnitt / Bildtransform – fertig 19.11.
 2c. Neue Dateien erkennen, „Neu“, Ordner reinziehen, Eingangsdatum, Tagessortierung, Korrekturvorschlag – fertig 19.11.
 3. Rahmen – fertig 19.11.
-4. Notizzettel / Text (Hintergrund- und Textfarbe, Schriftgröße)
+4. Notizzettel / Text (Hintergrund- und Textfarbe, Schriftgröße) + Ansichts-Tasten A/F/0 – fertig 19.11.
 5. Tags (Einzel + Mehrfach, Vorschläge; Datum-Datenebene steht schon)
 6. Filter
 
@@ -157,7 +158,9 @@ Formen-Bibliothek, Vorlagen, Zusammenarbeit. (Zeichnen war nur ein früher Vorsc
 | Fläche verschieben | Leertaste + Ziehen, mittlere Maustaste, oder Ziehen auf leerer Fläche mit Rechtsklick |
 | Zoomen | Mausrad (zum Mauszeiger hin), Touchpad-Pinch |
 | Zoom-Grenzen | 5 % – 800 % |
-| Alles zeigen | Taste `F` |
+| Alles zeigen | Taste `A` |
+| Auf Auswahl springen | Taste `F` (ohne Auswahl wie `A`) |
+| Zoom 100 % | Taste `0` oder Klick auf die Zoom-Anzeige oben rechts |
 | Auswahl | Klick, Umschalt+Klick, Auswahlrahmen auf leerer Fläche ziehen (Umschalt = hinzufügen) |
 | Skalieren | Eck-Anfasser der Auswahl ziehen |
 | Löschen vom Board | `Entf` oder Mülleimer – entfernt nur vom Board, nie die Datei |
@@ -169,6 +172,10 @@ Formen-Bibliothek, Vorlagen, Zusammenarbeit. (Zeichnen war nur ein früher Vorsc
 | Tabs | Doppelklick = umbenennen, ziehen = sortieren, × = löschen (mit Rückfrage) |
 | Rahmen anlegen | Knopf „▢ Rahmen“ oder Taste `R`, dann aufziehen (Klick = Standardgröße, `Esc` = abbrechen); „Rahmen um Auswahl“ in der Auswahl-Leiste oder `Strg+G` |
 | Rahmen bearbeiten | Beschriftung oder Rand anklicken/ziehen (Inhalt wandert mit); Doppelklick auf Beschriftung = umbenennen; Eck-Anfasser = Größe (Inhalt bleibt); Farbpunkte in der Auswahl-Leiste; `Entf` = nur Rahmen löschen |
+| Notizzettel | Knopf „▤ Zettel“ oder Taste `N`, dann Klick aufs Board; tippen (Enter = neue Zeile), `Esc`/Klick daneben = fertig; Doppelklick = bearbeiten |
+| Freier Text | Knopf „T Text“ oder Taste `T`, dann Klick aufs Board; wie Zettel, ohne Hintergrund |
+| Zettel/Text gestalten | Auswahl-Leiste: Zettel-Hintergrund, Textfarbe, Größe S/M/L/XL (auch für mehrere); Eck-Anfasser = Größe frei |
+| Werkzeug abbrechen | `Esc` (oder Taste/Knopf erneut) |
 
 ---
 

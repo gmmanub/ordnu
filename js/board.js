@@ -4,11 +4,15 @@ import {
   zoomAt, screenToWorld, fitView, boundsOf, intersects, scaleGroup,
   imageRect, setImageRect, setWindow, resetCrop, rotate, normalizeAngle, MIN_SIZE,
   FRAME_COLORS, FRAME_DEFAULT, frameHex, frameContents, drawOrder, contains,
+  NOTE_COLORS, TEXT_COLORS, FONT_SIZES, colorHex, ZOOM_MAX,
 } from './model.js';
 
 const ROT_HANDLE_PX = 34;  // Abstand des Dreh-Anfassers über dem Bild (Bildschirm-Pixel)
 const SNAP_DEG = 15;       // Umschalt beim Drehen
 const EDGE_PX = 8;         // so nah (Bildschirm-Pixel) am Rahmenrand gilt ein Klick als „auf den Rahmen“
+const VIEW_ANIM_MS = 250;  // Dauer der Ansichtssprünge (A, F, 0)
+const FIT_SEL_MAX = 4;     // F zoomt höchstens auf 400 %
+const isNote = i => i.type === 'note' || i.type === 'text';
 
 export class Board {
   constructor(viewport, world, overlay, cb) {
@@ -24,6 +28,8 @@ export class Board {
     this.ghost = null;
     this.tool = null;                   // 'frame' = nächstes Ziehen legt einen Rahmen an
     this.renaming = null;               // { id, input } – Rahmen-Name wird bearbeitet
+    this.editing = null;                // { id, ta, isNew } – Notiz/Text wird bearbeitet
+    this.anim = null;                   // laufender Ansichtssprung
     this.spaceDown = false;
     this.bind();
   }
@@ -31,6 +37,9 @@ export class Board {
   setContent(items, view) {
     this.cropId = null;
     this.renaming = null;
+    this.editing?.ta.remove();
+    this.editing = null;
+    this.stopAnim();
     this.setTool(null);
     this.items = items;
     this.view = { ...view };
@@ -47,15 +56,17 @@ export class Board {
     const ids = new Set(items.map(i => i.id));
     this.selected = new Set([...this.selected].filter(id => ids.has(id)));
     if (this.cropId && !ids.has(this.cropId)) this.cropId = null;
+    if (this.editing && !ids.has(this.editing.id)) { this.editing.ta.remove(); this.editing = null; }
     this.render();
   }
 
   byId(id) { return this.items.find(i => i.id === id); }
 
-  // Oberstes Bild an einem Board-Punkt (Rahmen zählen nicht – deren Inneres ist frei klickbar).
+  // Oberstes Element an einem Board-Punkt (Rahmen zählen nicht – deren Inneres ist frei klickbar).
   hitTest(p) {
-    for (let n = this.items.length - 1; n >= 0; n--) {
-      const i = this.items[n];
+    const order = drawOrder(this.items);
+    for (let n = order.length - 1; n >= 0; n--) {
+      const i = order[n];
       if (i.type === 'frame') continue;
       if (p.x >= i.x && p.x <= i.x + i.w && p.y >= i.y && p.y <= i.y + i.h) return i;
     }
@@ -88,6 +99,7 @@ export class Board {
   setTool(tool) {
     this.tool = tool;
     this.viewport.classList.toggle('tool-frame', tool === 'frame');
+    this.viewport.classList.toggle('tool-note', tool === 'note' || tool === 'text');
     this.cb.onToolChange?.(tool);
   }
   selectedItems() { return this.items.filter(i => this.selected.has(i.id)); }
@@ -151,6 +163,7 @@ export class Board {
       lbl.classList.toggle('editing', this.renaming?.id === item.id);
       return;
     }
+    if (isNote(item)) return this.layoutNote(item, node);
     const img = node.querySelector('img');
     if (img && item.type === 'image') this.layoutImg(item, img, item.x, item.y);
     if (this.cropId === item.id && this.ghost) this.layoutImg(item, this.ghost, 0, 0);
@@ -164,6 +177,118 @@ export class Board {
     img.style.left = `${r.cx - r.w / 2 - ox}px`;
     img.style.top = `${r.cy - r.h / 2 - oy}px`;
     img.style.transform = r.rot ? `rotate(${r.rot}deg)` : '';
+  }
+
+  layoutNote(item, node) {
+    if (item.type === 'note') node.style.setProperty('--bg', colorHex(NOTE_COLORS, item.bg));
+    node.style.setProperty('--tc', colorHex(TEXT_COLORS, item.color));
+    node.style.fontSize = `${item.fontSize}px`;
+    let body = node.querySelector('.note-body');
+    if (!body) { body = Object.assign(document.createElement('div'), { className: 'note-body' }); node.prepend(body); }
+    body.textContent = item.text; // nur reiner Text – nie als HTML
+    const editing = this.editing?.id === item.id;
+    body.hidden = editing;
+    node.classList.toggle('empty', !item.text && !editing);
+    if (editing && this.editing.ta.parentNode !== node) node.appendChild(this.editing.ta);
+  }
+
+  // Höhe an den Text anpassen: freier Text immer genau, Zettel wachsen nur mit.
+  autosize(item) {
+    const node = this.nodes.get(item.id);
+    if (!node || !isNote(item)) return;
+    const oldH = node.style.height;
+    node.style.height = 'auto';
+    const el = this.editing?.id === item.id ? this.editing.ta : node.querySelector('.note-body');
+    let need = node.offsetHeight;
+    if (el && el.scrollHeight > need) need = el.scrollHeight;
+    node.style.height = oldH;
+    need = Math.ceil(need);
+    item.h = item.type === 'text' ? Math.max(item.fontSize * 1.4, need) : Math.max(item.h, need);
+    this.layoutNode(item, node);
+  }
+
+  // Text bearbeiten: Textfeld direkt im Element (zoomt mit). Esc oder Klick daneben beendet, Enter = neue Zeile.
+  startEdit(id, { isNew = false } = {}) {
+    const item = this.byId(id);
+    if (!item || !isNote(item)) return;
+    this.finishEdit();
+    const ta = document.createElement('textarea');
+    ta.className = 'note-edit';
+    ta.value = item.text;
+    ta.spellcheck = false;
+    this.editing = { id, ta, isNew };
+    let done = false;
+    const end = () => { if (!done) { done = true; this.finishEdit(); } };
+    ta.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); end(); }
+    });
+    ta.addEventListener('input', () => { if (item.type === 'text') this.autosizeLive(item); });
+    ta.addEventListener('blur', end);
+    ta.addEventListener('pointerdown', e => e.stopPropagation());
+    this.setSelection([id]);
+    this.layoutNode(item);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+
+  autosizeLive(item) {
+    const ta = this.editing?.ta;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const need = Math.max(item.fontSize * 1.4, ta.scrollHeight);
+    ta.style.height = '';
+    if (need > item.h) { item.h = Math.ceil(need); this.layoutNode(item); this.renderOverlay(); }
+  }
+
+  finishEdit() {
+    const ed = this.editing;
+    if (!ed) return;
+    this.editing = null;
+    const item = this.byId(ed.id);
+    const text = ed.ta.value.replace(/\s+$/, '');
+    ed.ta.remove();
+    if (!item) return;
+    if (ed.isNew) {
+      // Anlegen + erster Text = ein Rückgängig-Schritt. Leerer freier Text wird wieder verworfen.
+      if (item.type === 'text' && !text.trim()) {
+        this.items = this.items.filter(i => i.id !== item.id);
+        this.selected.delete(item.id);
+        this.render();
+        this.cb.onDiscardNew?.(item.id);
+        this.viewport.focus();
+        return;
+      }
+      item.text = text;
+      this.layoutNode(item);
+      this.autosize(item);
+      this.cb.onChange();
+    } else if (text !== item.text) {
+      this.cb.onBeforeChange();
+      item.text = text;
+      this.layoutNode(item);
+      this.autosize(item);
+      this.cb.onChange();
+    } else {
+      this.layoutNode(item);
+      if (item.type === 'text') { this.cb.onBeforeChange(); this.autosize(item); this.cb.onChange(); }
+    }
+    this.renderOverlay();
+    this.viewport.focus();
+  }
+
+  // Farbe/Textfarbe/Größe für alle ausgewählten Notizen/Texte.
+  setNoteStyle(field, value) {
+    const notes = this.selectedItems().filter(i => isNote(i) && (field !== 'bg' || i.type === 'note'));
+    if (!notes.length || notes.every(n => n[field] === value)) return;
+    this.cb.onBeforeChange();
+    for (const n of notes) {
+      n[field] = value;
+      this.layoutNode(n);
+      if (field === 'fontSize') this.autosize(n);
+    }
+    this.renderOverlay();
+    this.cb.onChange();
   }
 
   // Bildquelle je nach Bildschirmgröße wählen (Vorschau oder Original), inkl. Ausschnitt-Vergrößerung.
@@ -197,11 +322,53 @@ export class Board {
     this.renderOverlay();
   }
 
+  // ---------- Ansichtssprünge (A, F, 0) – sanft animiert, keine Rückgängig-Schritte ----------
+
+  animateTo(target) {
+    this.stopAnim();
+    const from = { ...this.view };
+    const t0 = performance.now();
+    const ease = t => 1 - Math.pow(1 - t, 3);
+    const step = now => {
+      const t = Math.min(1, (now - t0) / VIEW_ANIM_MS);
+      const k = ease(t);
+      // Skalierung logarithmisch überblenden, Position so, dass der Bildmittelpunkt gleichmäßig wandert
+      const scale = Math.exp(Math.log(from.scale) + (Math.log(target.scale) - Math.log(from.scale)) * k);
+      const r = this.viewport.getBoundingClientRect();
+      const c0 = screenToWorld(from, r.width / 2, r.height / 2), c1 = screenToWorld(target, r.width / 2, r.height / 2);
+      const cx = c0.x + (c1.x - c0.x) * k, cy = c0.y + (c1.y - c0.y) * k;
+      this.view = { x: r.width / 2 - cx * scale, y: r.height / 2 - cy * scale, scale };
+      if (t >= 1) { this.view = { ...target }; this.anim = null; }
+      this.applyView();
+      if (this.anim) this.anim = requestAnimationFrame(step);
+      else this.cb.onViewChange(this.view);
+    };
+    this.anim = requestAnimationFrame(step);
+  }
+
+  stopAnim() {
+    if (this.anim) { cancelAnimationFrame(this.anim); this.anim = null; this.cb.onViewChange?.(this.view); }
+  }
+
+  // A = alles zeigen
   fitAll() {
     const r = this.viewport.getBoundingClientRect();
-    this.view = fitView(this.items, r.width, r.height);
-    this.applyView();
-    this.cb.onViewChange(this.view);
+    this.animateTo(fitView(this.items, r.width, r.height));
+  }
+
+  // F = auf die Auswahl einpassen; ohne Auswahl wie A
+  fitSelection() {
+    const sel = this.selectedItems();
+    if (!sel.length) return this.fitAll();
+    const r = this.viewport.getBoundingClientRect();
+    this.animateTo(fitView(sel, r.width, r.height, 60, Math.min(FIT_SEL_MAX, ZOOM_MAX)));
+  }
+
+  // 0 = Zoom 100 %, Bildmitte bleibt
+  resetZoom() {
+    const r = this.viewport.getBoundingClientRect();
+    const c = screenToWorld(this.view, r.width / 2, r.height / 2);
+    this.animateTo({ x: r.width / 2 - c.x, y: r.height / 2 - c.y, scale: 1 });
   }
 
   centerWorld() {
@@ -239,11 +406,45 @@ export class Board {
         bar.appendChild(dot);
       }
     }
+    if (sel.some(isNote)) bar.appendChild(this.noteControls(sel));
     const trash = uiButton('🗑', 'Vom Board entfernen (Entf) – Dateien und Rahmeninhalt bleiben erhalten', () => this.removeSelected());
     trash.classList.add('trash');
     bar.appendChild(trash);
     o.appendChild(bar);
     this.placeRenameInput();
+  }
+
+  // Auswahl-Leiste für Notizen/Text: Hintergrund (nur Zettel), Textfarbe, Schriftgröße.
+  noteControls(sel) {
+    const wrap = document.createElement('div');
+    wrap.className = 'note-controls';
+    const group = (title, cls) => {
+      const g = document.createElement('div');
+      g.className = `ctl-group ${cls}`;
+      g.appendChild(Object.assign(document.createElement('span'), { className: 'ctl-title', textContent: title }));
+      wrap.appendChild(g);
+      return g;
+    };
+    const dots = (g, list, field) => {
+      for (const c of list) {
+        const dot = uiButton('', c.label, () => this.setNoteStyle(field, c.key));
+        dot.className = 'overlay-ui color-dot';
+        dot.dataset[field === 'bg' ? 'bg' : 'tc'] = c.key;
+        dot.style.setProperty('--dot', c.hex);
+        if (sel.every(i => !isNote(i) || (field === 'bg' && i.type !== 'note') || i[field] === c.key)) dot.classList.add('on');
+        g.appendChild(dot);
+      }
+    };
+    if (sel.some(i => i.type === 'note')) dots(group('Zettel', 'bg'), NOTE_COLORS, 'bg');
+    dots(group('Text', 'tc'), TEXT_COLORS, 'color');
+    const g = group('Größe', 'fs');
+    for (const f of FONT_SIZES) {
+      const b = uiButton(f.key, `Schriftgröße ${f.key}`, () => this.setNoteStyle('fontSize', f.size));
+      b.dataset.fs = f.key;
+      if (sel.filter(isNote).every(i => i.fontSize === f.size)) b.classList.add('on');
+      g.appendChild(b);
+    }
+    return wrap;
   }
 
   // ---------- Rahmen ----------
@@ -391,6 +592,7 @@ export class Board {
 
     vp.addEventListener('wheel', e => {
       e.preventDefault();
+      this.stopAnim();
       const r = vp.getBoundingClientRect();
       const speed = e.ctrlKey ? 0.01 : 0.0015; // ctrlKey = Touchpad-Pinch
       this.view = zoomAt(this.view, Math.exp(-e.deltaY * speed), e.clientX - r.left, e.clientY - r.top);
@@ -401,6 +603,8 @@ export class Board {
     vp.addEventListener('contextmenu', e => e.preventDefault());
 
     vp.addEventListener('pointerdown', e => {
+      if (e.target.closest('textarea.note-edit')) return; // Text markieren im Textfeld
+      this.stopAnim();
       if (!e.target.closest('input, textarea')) vp.focus();
       const wantsPan = e.button === 1 || e.button === 2 || (e.button === 0 && this.spaceDown);
       if (wantsPan) return this.startPan(e);
@@ -415,6 +619,12 @@ export class Board {
         return;
       }
       if (this.tool === 'frame') return this.startFrameDraw(e);
+      if (this.tool === 'note' || this.tool === 'text') {
+        e.preventDefault();
+        const tool = this.tool;
+        this.setTool(null);
+        return this.cb.onCreateNote?.(tool, this.pointerWorld(e));
+      }
       const label = e.target.closest('.frame-label');
       if (label) return this.startMove(e, label.parentNode.dataset.id);
       if (itemNode && !itemNode.classList.contains('frame')) return this.startMove(e, itemNode.dataset.id);
@@ -428,6 +638,7 @@ export class Board {
       if (this.cropId || this.tool) return;
       const p = this.pointerWorld(e);
       const hit = this.hitTest(p);
+      if (hit && isNote(hit)) return this.startEdit(hit.id);
       if (hit) return this.enterCrop(hit.id);
       const frame = this.frameLabelAt(e.clientX, e.clientY) || this.frameEdgeAt(p);
       if (frame) this.startRename(frame.id);
@@ -439,8 +650,16 @@ export class Board {
       if (e.code === 'Space') { this.spaceDown = true; vp.classList.add('space'); e.preventDefault(); }
       if (e.key === 'Escape' && this.tool) { e.preventDefault(); this.setTool(null); return; }
       if (e.key === 'Escape' || (e.key === 'Enter' && this.cropId)) { e.preventDefault(); this.exitCrop(); }
-      if ((e.key === 'f' || e.key === 'F') && !this.cropId) this.fitAll();
-      if ((e.key === 'r' || e.key === 'R') && !this.cropId && !$app().hidden) this.setTool(this.tool === 'frame' ? null : 'frame');
+      if ($app().hidden) return;
+      const k = e.key.toLowerCase();
+      if (k === 'a' && !this.cropId) this.fitAll();
+      if (k === 'f' && !this.cropId) this.fitSelection();
+      if (e.key === '0') this.resetZoom();
+      if (!this.cropId) {
+        if (k === 'r') this.setTool(this.tool === 'frame' ? null : 'frame');
+        if (k === 'n') this.setTool(this.tool === 'note' ? null : 'note');
+        if (k === 't') this.setTool(this.tool === 'text' ? null : 'text');
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !this.cropId) this.removeSelected();
     });
     window.addEventListener('keyup', e => {
@@ -565,8 +784,9 @@ export class Board {
     const cx = corner.includes('w') ? b.x : b.x + b.w;
     const cy = corner.includes('n') ? b.y : b.y + b.h;
     const vx = cx - ax, vy = cy - ay, len2 = vx * vx + vy * vy;
-    const start = sel.map(i => ({ x: i.x, y: i.y, w: i.w, h: i.h }));
-    const onlyFrames = sel.every(i => i.type === 'frame'); // Rahmen: Seitenverhältnis frei, Inhalt bleibt stehen
+    const start = sel.map(i => ({ x: i.x, y: i.y, w: i.w, h: i.h, fs: i.fontSize }));
+    // Rahmen/Notizen/Text: Seitenverhältnis frei, Inhalt bleibt stehen. Mit Bildern: fest, Schrift skaliert mit.
+    const onlyFrames = sel.every(i => i.type !== 'image');
     this.cb.onBeforeChange();
     this.drag(e, ev => {
       const p = this.pointerWorld(ev);
@@ -583,12 +803,16 @@ export class Board {
         this.renderOverlay();
         return;
       }
-      const k = ((p.x - ax) * vx + (p.y - ay) * vy) / len2;
-      scaleGroup(sel, start, ax, ay, k);
+      const k = scaleGroup(sel, start, ax, ay, ((p.x - ax) * vx + (p.y - ay) * vy) / len2);
+      sel.forEach((it, n) => { if (isNote(it)) it.fontSize = Math.round(start[n].fs * k * 10) / 10; });
       sel.forEach(i => this.layoutNode(i));
       this.refreshSources();
       this.renderOverlay();
-    }, () => this.cb.onChange());
+    }, () => {
+      sel.filter(i => i.type === 'text').forEach(i => this.autosize(i));
+      this.renderOverlay();
+      this.cb.onChange();
+    });
   }
 
   // Ausschnitt-Kante/-Ecke ziehen: sichtbarer Bereich ändert sich, Bild bleibt stehen.
@@ -689,6 +913,7 @@ export class Board {
   // Entfernt nur vom Board – nie die Datei (PFLICHTENHEFT 0.3).
   removeSelected() {
     if (!this.selected.size) return;
+    if (this.editing) { this.editing.ta.remove(); this.editing = null; }
     this.cb.onBeforeChange();
     const ids = new Set(this.selected);
     this.items = this.items.filter(i => !ids.has(i.id));

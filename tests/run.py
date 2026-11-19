@@ -118,7 +118,8 @@ def main():
         page.mouse.wheel(0, 300)
         zoom = page.text_content("#zoom-label")
         check(zoom.strip() != "100 %", f"Mausrad zoomt: {zoom}")
-        page.keyboard.press("f")
+        page.keyboard.press("a")
+        page.wait_for_timeout(350)
 
         def ev(body):
             """JS mit app (App-Modul), M (Datenmodell), B (Board) und d (Projektdaten) ausführen."""
@@ -741,11 +742,12 @@ def main():
 
         # Alles zeigen berücksichtigt Rahmen; Beschriftung bei kleinem Zoom lesbar
         page.mouse.click(1350, 790)
-        page.keyboard.press("f")
+        page.keyboard.press("a")
+        page.wait_for_timeout(350)
         fit = ev("""const r = document.getElementById('viewport').getBoundingClientRect();
           return [...document.querySelectorAll('#world .item.frame')].every(n => { const b = n.getBoundingClientRect();
             return b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1; });""")
-        check(fit, "F zeigt alle Rahmen")
+        check(fit, "A zeigt alle Rahmen")
         page.screenshot(path=os.path.join(OUT, "08_rahmen.png"))
         ev("B.view = { x: 300, y: 200, scale: 0.2 }; B.applyView(); return true;")
         hgt = ev("return document.querySelector('#world .item.frame .frame-label').getBoundingClientRect().height;")
@@ -767,6 +769,204 @@ def main():
         check(page.locator("#world .item.frame").count() == 4, "Rahmen nach Neuladen angezeigt")
         oldf = ev("return M.normalizeData({ version: 1, tabs: [{ id: 't', name: 'Alt' }], activeTab: 't', items: [{ id: 'f', tab: 't', type: 'frame', x: 0, y: 0, w: 100, h: 80 }] }).items[0];")
         check(oldf["name"] == "Rahmen" and oldf["color"] == "standard" and oldf["rule"] is None, "Unvollständige Rahmen-Daten werden ergänzt")
+
+
+        print("Notizzettel / Text")
+        ev("""const tab = M.createTab('Notiztest'); d.tabs.push(tab); app.switchTab(tab.id);
+          B.view = { x: 0, y: 0, scale: 1 }; B.applyView(); B.setSelection([]); return true;""")
+        def notes():
+            return [i for i in items() if i["type"] in ("note", "text")]
+        def hist_len():
+            return ev("const h = app.state.hist.of(app.state.data.activeTab); return h.past.length;")
+
+        page.click("#btn-note")
+        check(ev("return B.tool;") == "note" and page.locator("#btn-note.active").count() == 1, "Knopf „Zettel“ aktiviert das Werkzeug")
+        x, y = scr(300, 250)
+        page.mouse.click(x, y)
+        check(page.locator("textarea.note-edit").count() == 1 and ev("return document.activeElement.classList.contains('note-edit');"),
+              "Klick legt Zettel an, Text sofort editierbar")
+        h0 = hist_len()
+        page.keyboard.type("Hallo")
+        page.keyboard.press("Enter")
+        page.keyboard.type("Zeile 2 naft0")
+        check(ev("return B.tool;") is None and abs(ev("return B.view.scale;") - 1) < 1e-9, "Tasten N/A/F/T/0 beim Tippen wirken nicht")
+        page.keyboard.press("Escape")
+        n = notes()
+        check(len(n) == 1 and n[0]["type"] == "note" and n[0]["text"] == "Hallo\nZeile 2 naft0" and page.locator("textarea.note-edit").count() == 0,
+              f"Esc beendet, Text mit Zeilenumbruch gespeichert: {[i.get('text') for i in n]}")
+        check(hist_len() == h0 + 1, "Anlegen + Text = ein Rückgängig-Schritt")
+        note_id = n[0]["id"]
+        ev("app.undo(); return true;")
+        check(len(notes()) == 0, "Rückgängig entfernt den neuen Zettel")
+        ev("app.redo(); return true;")
+        check(len(notes()) == 1 and notes()[0]["text"].startswith("Hallo"), "Wiederholen holt ihn mit Text zurück")
+
+        # Freier Text mit HTML-Zeichen wird als Text angezeigt
+        page.keyboard.press("t")
+        check(ev("return B.tool;") == "text" and page.locator("#btn-text.active").count() == 1, "Taste T aktiviert Text")
+        x, y = scr(700, 250)
+        page.mouse.click(x, y)
+        page.keyboard.type("<b>fett</b>")
+        page.mouse.click(*scr(1100, 700))  # Klick daneben beendet
+        t = [i for i in notes() if i["type"] == "text"]
+        check(len(t) == 1 and t[0]["text"] == "<b>fett</b>" and "bg" not in t[0], "Freier Text angelegt (ohne Hintergrund)")
+        txt_id = t[0]["id"]
+        safe = ev(f"const n = document.querySelector('[data-id=\"{txt_id}\"] .note-body'); return [n.textContent, n.querySelector('b') === null];")
+        check(safe == ["<b>fett</b>", True], "Text mit <b> wird als reiner Text angezeigt (kein HTML)")
+        check(t[0]["h"] < 80, f"Freier Text passt seine Höhe an: {t[0]['h']}")
+
+        # Leerer freier Text wird verworfen, ohne Verlaufseintrag
+        h1 = hist_len()
+        page.keyboard.press("t")
+        page.mouse.click(*scr(700, 500))
+        page.keyboard.press("Escape")
+        check(len(notes()) == 2 and hist_len() == h1, "Leerer Text wird verworfen (kein Rückgängig-Schritt)")
+
+        # Doppelklick bearbeitet
+        nx, ny = center(f'[data-id="{note_id}"]')
+        page.mouse.dblclick(nx, ny)
+        check(page.locator("textarea.note-edit").count() == 1, "Doppelklick öffnet Bearbeiten")
+        page.keyboard.press("End")
+        page.keyboard.type("!")
+        page.keyboard.press("Escape")
+        cur = [i for i in notes() if i["id"] == note_id][0]["text"]
+        check(cur == "Hallo\nZeile 2 naft0!", f"Text bearbeitet: {cur!r}")
+        ev("app.undo(); return true;")
+        check([i for i in notes() if i["id"] == note_id][0]["text"] == "Hallo\nZeile 2 naft0", "Bearbeitung rückgängig")
+        ev("app.redo(); return true;")
+
+        # Farben und Größe über die Auswahl-Leiste
+        page.mouse.click(nx, ny)
+        page.click('.sel-bar [data-bg="mint"]')
+        page.click('.sel-bar [data-tc="rost"]')
+        page.click('.sel-bar [data-fs="XL"]')
+        cur = [i for i in notes() if i["id"] == note_id][0]
+        check(cur["bg"] == "mint" and cur["color"] == "rost" and cur["fontSize"] == 48, f"Hintergrund, Textfarbe, Größe gesetzt: {cur['bg']}, {cur['color']}, {cur['fontSize']}")
+        css = ev(f"const s = getComputedStyle(document.querySelector('[data-id=\"{note_id}\"]')); return [s.backgroundColor, s.color, s.fontSize];")
+        check(css == ["rgb(168, 224, 192)", "rgb(217, 136, 128)", "48px"], f"Darstellung folgt: {css}")
+        check(cur["h"] > 200, f"Zettel wächst mit größerer Schrift: {cur['h']}")
+
+        # Mehrfachauswahl: Zettel + Text
+        tx, ty = center(f'[data-id="{txt_id}"]')
+        page.keyboard.down("Shift"); page.mouse.click(tx, ty); page.keyboard.up("Shift")
+        check(set(ev("return [...B.selected];")) == {note_id, txt_id}, "Zettel + Text gemeinsam ausgewählt")
+        page.click('.sel-bar [data-tc="blau"]')
+        page.click('.sel-bar [data-bg="flieder"]')
+        page.click('.sel-bar [data-fs="S"]')
+        both = {i["id"]: i for i in notes()}
+        check(both[note_id]["color"] == "blau" and both[txt_id]["color"] == "blau", "Textfarbe für beide")
+        check(both[note_id]["bg"] == "flieder" and "bg" not in both[txt_id], "Hintergrund nur für den Zettel")
+        check(both[note_id]["fontSize"] == 14 and both[txt_id]["fontSize"] == 14, "Größe S für beide")
+
+        # Ebenen: Notizen vor Bildern, Rahmen dahinter
+        ev("await app.placeImage('alt_x.jpg', 250, 200, { centered: false }); B.setSelection([]); return true;")
+        order = ev("return [...document.querySelectorAll('#world .item')].map(n => n.classList.contains('image') ? 'I' : n.classList.contains('frame') ? 'F' : 'N');")
+        check(order.index("I") < order.index("N"), f"Notizen liegen vor Bildern: {order}")
+        hit = ev(f"const it = app.state.data.items.find(i => i.id === '{note_id}'); return B.hitTest({{ x: it.x + 5, y: it.y + 5 }}).type;")
+        check(hit == "note", "Klick auf Überlappung trifft den Zettel")
+
+        # Mit Rahmen mitwandern
+        ev("""const it = app.state.data.items.find(i => i.id === '%s');
+          app.addFrame({ x: it.x - 60, y: it.y - 60, w: 500, h: 500 }, { rename: false }); B.setSelection([]); return true;""" % note_id)
+        order = ev("return [...document.querySelectorAll('#world .item')].map(n => n.classList.contains('image') ? 'I' : n.classList.contains('frame') ? 'F' : 'N');")
+        check(order[0] == "F", f"Rahmen hinten: {order}")
+        n0 = [i for i in notes() if i["id"] == note_id][0]
+        lx, ly = center("#world .item.frame .frame-label")
+        drag(lx, ly, lx + 100, ly + 40)
+        n1 = [i for i in notes() if i["id"] == note_id][0]
+        check(round(n1["x"] - n0["x"]) == 100 and round(n1["y"] - n0["y"]) == 40, "Zettel wandert mit dem Rahmen")
+
+        # Freie Größe per Anfasser (Seitenverhältnis frei, Schrift bleibt)
+        nx, ny = center(f'[data-id="{note_id}"]')
+        page.mouse.click(nx, ny)
+        s0 = [i for i in notes() if i["id"] == note_id][0]
+        hx, hy = center(".handle.corner.se")
+        drag(hx, hy, hx + 120, hy + 10)
+        s1 = [i for i in notes() if i["id"] == note_id][0]
+        check(round(s1["w"] - s0["w"]) == 120 and round(s1["h"] - s0["h"]) == 10 and s1["fontSize"] == s0["fontSize"],
+              f"Zettel frei skaliert, Schrift bleibt: {s0['w']}x{s0['h']} → {s1['w']}x{s1['h']}")
+        # Gruppe mit Bild: Seitenverhältnis fest, Schrift skaliert mit
+        ev("""const img = app.state.data.items.find(i => i.tab === app.state.data.activeTab && i.type === 'image');
+          B.setSelection(['%s', img.id]); return true;""" % note_id)
+        g0 = [i for i in notes() if i["id"] == note_id][0]
+        hx, hy = center(".handle.corner.se")
+        drag(hx, hy, hx + 200, hy + 200)
+        g1 = [i for i in notes() if i["id"] == note_id][0]
+        k = g1["w"] / g0["w"]
+        check(k > 1.1 and abs(g1["fontSize"] - g0["fontSize"] * k) < 0.2, f"Mit Bild skaliert: Schrift wächst mit (×{k:.2f})")
+
+        # Löschen + alles rückgängig/wiederholen
+        page.keyboard.press("Delete")
+        check(not [i for i in notes() if i["id"] == note_id], "Zettel gelöscht")
+        cnt = ev("""let n = 0; while (app.undo()) n++; const left = app.state.data.items.filter(i => i.tab === app.state.data.activeTab).length;
+          let m = 0; while (app.redo()) m++; return { n, m, left };""")
+        check(cnt["n"] == cnt["m"] and cnt["n"] >= 12 and cnt["left"] == 0, f"Jeder Schritt rückgängig/wiederholbar: {cnt}")
+        check(not [i for i in notes() if i["id"] == note_id] and len([i for i in notes() if i["id"] == txt_id]) == 1, "Stand nach Wiederholen stimmt")
+        page.screenshot(path=os.path.join(OUT, "10_notizen.png"))
+
+        # Speichern/Neuladen
+        ev("app.undo(); return true;")  # Zettel wieder da
+        rl = ev("""await app.flushAll(); await app.openProject('Projekt Sonnendeck');
+          const d2 = app.state.data; const t = d2.tabs.find(x => x.name === 'Notiztest'); app.switchTab(t.id);
+          return d2.items.filter(i => i.tab === t.id && (i.type === 'note' || i.type === 'text')).map(n => ({ type: n.type, text: n.text, color: n.color, bg: n.bg ?? null, fs: n.fontSize }));""")
+        check(sorted(r["type"] for r in rl) == ["note", "text"] and any(r["text"].startswith("Hallo") and r["bg"] == "flieder" for r in rl),
+              f"Notizen gespeichert und neu geladen: {rl}")
+        check(page.locator("#world .item.note").count() == 1 and page.locator("#world .item.text").count() == 1, "Notizen nach Neuladen angezeigt")
+        ev("""const n = app.state.data.items.find(i => i.tab === app.state.data.activeTab && i.type === 'note');
+          await app.placeImage('alt_y.jpg', n.x + n.w + 40, n.y, { centered: false });
+          app.addNote('note', { x: n.x + n.w / 2, y: n.y + n.h + 160 }, { edit: false }); B.setSelection([n.id]); return true;""")
+        page.keyboard.press("a"); page.wait_for_timeout(400)
+        page.screenshot(path=os.path.join(OUT, "11_notizen_auswahl.png"))
+        ev("app.undo(); app.undo(); return true;")
+        oldn = ev("return M.normalizeData({ version: 1, tabs: [{ id: 't', name: 'Alt' }], activeTab: 't', items: [{ id: 'n', tab: 't', type: 'note', x: 0, y: 0, w: 100, h: 80 }] }).items[0];")
+        check(oldn["text"] == "" and oldn["bg"] == "gelb" and oldn["color"] == "schwarz" and oldn["fontSize"] == 20, "Unvollständige Notiz-Daten werden ergänzt")
+
+        print("Ansichts-Tasten A / F / 0")
+        ev("B.setSelection([]); B.view = { x: 900, y: 600, scale: 2.5 }; B.applyView(); return true;")
+        h2 = hist_len()
+        page.locator("#viewport").focus()
+        page.keyboard.press("a")
+        page.wait_for_timeout(400)
+        inside = ev("""const r = document.getElementById('viewport').getBoundingClientRect();
+          return [...document.querySelectorAll('#world .item')].every(n => { const b = n.getBoundingClientRect();
+            return b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1; });""")
+        check(inside, "A zeigt alles")
+        va = ev("return B.view;")
+        ev("B.view = { x: 0, y: 0, scale: 0.3 }; B.applyView(); return true;")
+        page.keyboard.press("f")
+        page.wait_for_timeout(400)
+        vf = ev("return B.view;")
+        check(all(abs(va[k] - vf[k]) < 0.01 for k in ("x", "y", "scale")), "F ohne Auswahl = A")
+        nid = ev("return app.state.data.items.find(i => i.tab === app.state.data.activeTab && i.type === 'note').id;")
+        ev(f"B.setSelection(['{nid}']); return true;")
+        page.keyboard.press("f")
+        page.wait_for_timeout(400)
+        foc = ev(f"""const r = document.getElementById('viewport').getBoundingClientRect();
+          const b = document.querySelector('[data-id="{nid}"]').getBoundingClientRect();
+          return {{ dx: (b.left + b.width / 2) - (r.left + r.width / 2), dy: (b.top + b.height / 2) - (r.top + r.height / 2), w: b.width, vw: r.width, scale: B.view.scale }};""")
+        check(abs(foc["dx"]) < 2 and abs(foc["dy"]) < 2 and foc["scale"] > 1, f"F springt auf die Auswahl (mittig, herangezoomt): {foc}")
+        c0 = ev("const r = document.getElementById('viewport').getBoundingClientRect(); return M.screenToWorld(B.view, r.width / 2, r.height / 2);")
+        page.keyboard.press("0")
+        page.wait_for_timeout(400)
+        c1 = ev("const r = document.getElementById('viewport').getBoundingClientRect(); return M.screenToWorld(B.view, r.width / 2, r.height / 2);")
+        check(abs(ev("return B.view.scale;") - 1) < 1e-9 and abs(c0["x"] - c1["x"]) < 0.5 and abs(c0["y"] - c1["y"]) < 0.5,
+              "0 setzt Zoom auf 100 %, Bildmitte bleibt")
+        ev("B.view = { ...B.view, scale: 0.4 }; B.applyView(); return true;")
+        page.click("#zoom-label")
+        page.wait_for_timeout(400)
+        check(abs(ev("return B.view.scale;") - 1) < 1e-9 and page.text_content("#zoom-label").strip() == "100 %", "Klick auf Zoom-Anzeige = 100 %")
+        check(hist_len() == h2, "Ansichtssprünge sind keine Rückgängig-Schritte")
+        ev("B.view = { ...B.view, scale: 0.6 }; B.applyView(); return true;")
+        page.keyboard.down("Control"); page.keyboard.press("0"); page.keyboard.up("Control")
+        page.wait_for_timeout(350)
+        check(abs(ev("return B.view.scale;") - 0.6) < 1e-9, "Strg+0 löst in der App nichts aus")
+        ev("B.view = { x: 0, y: 0, scale: 0.5 }; B.applyView(); return true;")
+        page.keyboard.press("a")
+        page.wait_for_timeout(50)
+        page.mouse.move(*scr(100, 100))
+        page.mouse.wheel(0, -100)
+        page.wait_for_timeout(400)
+        check(ev("return B.anim;") is None, "Mausrad bricht laufenden Sprung ab")
 
         print("Sicherheitssperre (eigenes Fenster, Sperre aktiv)")
         ctx_csp = browser.new_context()

@@ -88,7 +88,7 @@ export function screenToWorld(view, sx, sy) {
 }
 
 // Ansicht so wählen, dass alle Elemente in den Ausschnitt passen.
-export function fitView(items, width, height, margin = 40) {
+export function fitView(items, width, height, margin = 40, maxScale = 1) {
   if (!items.length) return { x: 0, y: 0, scale: 1 };
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const i of items) {
@@ -96,7 +96,7 @@ export function fitView(items, width, height, margin = 40) {
     maxX = Math.max(maxX, i.x + i.w); maxY = Math.max(maxY, i.y + i.h);
   }
   const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
-  const scale = clampZoom(Math.min((width - 2 * margin) / bw, (height - 2 * margin) / bh, 1));
+  const scale = clampZoom(Math.min((width - 2 * margin) / bw, (height - 2 * margin) / bh, maxScale));
   return {
     x: (width - bw * scale) / 2 - minX * scale,
     y: (height - bh * scale) / 2 - minY * scale,
@@ -128,6 +128,7 @@ export function normalizeItem(item) {
     if (!FRAME_COLORS.some(c => c.key === item.color)) item.color = 'standard';
     if (item.rule === undefined) item.rule = null; // Platz für Regeln (V2 Einsortieren)
   }
+  if (item.type === 'note' || item.type === 'text') normalizeNote(item);
   return item;
 }
 
@@ -176,10 +177,68 @@ export function frameContents(frame, items) {
     && (it.type === 'frame' ? contains(frame, it) : centerInside(frame, it)));
 }
 
-// Zeichenreihenfolge: Rahmen hinten (große hinter kleinen), sonst Datenreihenfolge.
+// Zeichenreihenfolge: Rahmen hinten (große hinter kleinen), dann Bilder, Notizen/Text vorn.
 export function drawOrder(items) {
   const frames = items.filter(i => i.type === 'frame').sort((a, b) => b.w * b.h - a.w * a.h);
-  return [...frames, ...items.filter(i => i.type !== 'frame')];
+  const front = i => i.type === 'note' || i.type === 'text';
+  return [...frames, ...items.filter(i => i.type !== 'frame' && !front(i)), ...items.filter(front)];
+}
+
+// ---------- Notizzettel / Text (PFLICHTENHEFT 2, Bau-Schritt 4) ----------
+// type 'note' { text, bg, color, fontSize } · type 'text' { text, color, fontSize } (ohne Hintergrund).
+// Text ist reiner Text (Anzeige nur per textContent).
+
+export const NOTE_COLORS = [ // Hintergrund: klassische Zettelfarben + ruhige Töne passend zu den Rahmen
+  { key: 'gelb', label: 'Gelb', hex: '#f3dd6d' },
+  { key: 'orange', label: 'Orange', hex: '#f5b971' },
+  { key: 'rosa', label: 'Rosa', hex: '#f2a7c3' },
+  { key: 'mint', label: 'Mint', hex: '#a8e0c0' },
+  { key: 'himmel', label: 'Himmel', hex: '#a9cdf0' },
+  { key: 'flieder', label: 'Flieder', hex: '#c9b8f0' },
+  { key: 'weiss', label: 'Weiß', hex: '#f2f2f2' },
+  { key: 'ocker', label: 'Ocker', hex: '#e8b04a' },
+  { key: 'petrol', label: 'Petrol', hex: '#5fb3b3' },
+  { key: 'dunkel', label: 'Dunkel', hex: '#2c2d32' },
+];
+export const TEXT_COLORS = [
+  { key: 'schwarz', label: 'Schwarz', hex: '#1b1c1f' },
+  { key: 'weiss', label: 'Weiß', hex: '#f2f2f2' },
+  { key: 'grau', label: 'Grau', hex: '#9a9ba3' },
+  { key: 'ocker', label: 'Ocker', hex: '#e8b04a' },
+  { key: 'blau', label: 'Blau', hex: '#6fa8dc' },
+  { key: 'salbei', label: 'Salbei', hex: '#8fbf7f' },
+  { key: 'rost', label: 'Rost', hex: '#d98880' },
+  { key: 'lavendel', label: 'Lavendel', hex: '#a99ad6' },
+  { key: 'petrol', label: 'Petrol', hex: '#5fb3b3' },
+  { key: 'rose', label: 'Rosé', hex: '#d79bb8' },
+];
+export const FONT_SIZES = [ // Schriftgröße in Board-Einheiten
+  { key: 'S', size: 14 }, { key: 'M', size: 20 }, { key: 'L', size: 32 }, { key: 'XL', size: 48 },
+];
+export const NOTE_DEFAULT = { w: 200, h: 200, bg: 'gelb', color: 'schwarz', fontSize: 20 };
+export const TEXT_DEFAULT = { w: 320, h: 40, color: 'weiss', fontSize: 32 };
+
+export function colorHex(list, key) {
+  return (list.find(c => c.key === key) || list[0]).hex;
+}
+
+export function createNote(type, tabId, cx, cy) {
+  const d = type === 'note' ? NOTE_DEFAULT : TEXT_DEFAULT;
+  const item = {
+    id: newId(type), tab: tabId, type,
+    x: Math.round(cx - d.w / 2), y: Math.round(cy - d.h / 2), w: d.w, h: d.h,
+    text: '', color: d.color, fontSize: d.fontSize,
+  };
+  if (type === 'note') item.bg = d.bg;
+  return item;
+}
+
+function normalizeNote(item) {
+  const d = item.type === 'note' ? NOTE_DEFAULT : TEXT_DEFAULT;
+  item.text = typeof item.text === 'string' ? item.text : '';
+  if (!TEXT_COLORS.some(c => c.key === item.color)) item.color = d.color;
+  item.fontSize = Number.isFinite(item.fontSize) ? Math.min(400, Math.max(4, item.fontSize)) : d.fontSize;
+  if (item.type === 'note' && !NOTE_COLORS.some(c => c.key === item.bg)) item.bg = d.bg;
 }
 
 // ---------- Ausschnitt / Bildtransform ----------

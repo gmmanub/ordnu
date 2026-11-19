@@ -3,7 +3,7 @@
 import {
   createTab, newId, DEFAULT_IMAGE_WIDTH, defaultCrop, isImageName,
   effectiveDate, dateSuggestion, formatDate, formatDay,
-  createFrame, boundsOf, FRAME_PAD,
+  createFrame, boundsOf, FRAME_PAD, createNote,
 } from './model.js';
 import {
   supportsFolders, rememberRoot, recallRoot, hasPermission, listProjects,
@@ -221,6 +221,28 @@ export function addFrame(area, { rename = true } = {}) {
   commitChange();
   if (rename) board.startRename(f.id);
   return f;
+}
+
+// ---------- Notizzettel / Text (Bau-Schritt 4) ----------
+
+// Anlegen + erster Text ergeben zusammen einen Rückgängig-Schritt (Abschluss in board.finishEdit).
+export function addNote(type, p, { edit = true } = {}) {
+  if (!state.data) return null;
+  beginChange();
+  const n = createNote(type, state.data.activeTab, p.x, p.y);
+  state.data.items.push(n);
+  board.replaceItems(tabItems());
+  board.setSelection([n.id]);
+  if (edit) board.startEdit(n.id, { isNew: true });
+  else commitChange();
+  return n;
+}
+
+// Leerer neuer Text wurde verworfen: ohne Verlaufseintrag entfernen.
+function discardNew(id) {
+  state.data.items = state.data.items.filter(i => i.id !== id);
+  state.tx = null;
+  markPlaced();
 }
 
 export function frameAroundSelection() {
@@ -877,8 +899,14 @@ async function init() {
     onViewApplied: view => { $('zoom-label').textContent = `${Math.round(view.scale * 100)} %`; },
     onDropImage: (path, x, y) => placeImage(path, x, y),
     onCreateFrame: area => addFrame(area),
+    onCreateNote: (type, p) => addNote(type, p),
+    onDiscardNew: id => discardNew(id),
     onFrameAround: () => frameAroundSelection(),
-    onToolChange: tool => $('btn-frame')?.classList.toggle('active', tool === 'frame'),
+    onToolChange: tool => {
+      $('btn-frame')?.classList.toggle('active', tool === 'frame');
+      $('btn-note')?.classList.toggle('active', tool === 'note');
+      $('btn-text')?.classList.toggle('active', tool === 'text');
+    },
     onDropHandles: (handles, x, y) => dropHandles(handles, x, y).catch(err => toast(err.message, 8000)),
     getImageUrl: imageUrlFor,
   });
@@ -887,6 +915,9 @@ async function init() {
   $('btn-change-root').addEventListener('click', pickRoot);
   $('btn-add-tab').addEventListener('click', addTab);
   $('btn-frame').addEventListener('click', () => board.setTool(board.tool === 'frame' ? null : 'frame'));
+  $('btn-note').addEventListener('click', () => board.setTool(board.tool === 'note' ? null : 'note'));
+  $('btn-text').addEventListener('click', () => board.setTool(board.tool === 'text' ? null : 'text'));
+  $('zoom-label').addEventListener('click', () => board.resetZoom());
   $('btn-rescan').addEventListener('click', () => rescan().then(r => {
     if (!r.added.length) toast('Keine neuen Bilder.');
   }));

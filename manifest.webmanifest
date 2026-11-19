@@ -1,0 +1,13 @@
+{
+  "name": "ordnu",
+  "short_name": "ordnu",
+  "description": "Lokales Bilder-Board – Bilder und Daten bleiben im eigenen Ordner.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1b1c1f",
+  "theme_color": "#1b1c1f",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <!-- Sicherheitssperre: nur eigener Ursprung, keine Verbindungen nach außen. Nie lockern (PFLICHTENHEFT 0.2). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; font-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ordnu</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <!-- Startbildschirm -->
+  <section id="start" class="screen">
+    <div class="start-box">
+      <h1>ordnu</h1>
+      <p class="muted">Lokales Bilder-Board. Bilder und Daten bleiben in deinem Ordner.</p>
+      <div id="start-unsupported" class="warn" hidden>
+        Dieser Browser kann keine lokalen Ordner öffnen. Bitte Chrome oder Edge verwenden.
+      </div>
+      <button id="btn-pick-root" class="primary">Hauptordner wählen …</button>
+      <button id="btn-reopen-root" hidden>Zuletzt genutzten Ordner öffnen</button>
+      <p class="muted small">Jeder Unterordner im Hauptordner ist ein Projekt.</p>
+    </div>
+  </section>
+
+  <!-- Projektauswahl -->
+  <section id="projects" class="screen" hidden>
+    <div class="start-box">
+      <h2>Projekt wählen</h2>
+      <p class="muted small" id="root-name"></p>
+      <ul id="project-list" class="project-list"></ul>
+      <p id="project-empty" class="muted" hidden>Keine Unterordner gefunden. Lege im Hauptordner einen Ordner pro Projekt an.</p>
+      <button id="btn-change-root">Anderen Hauptordner wählen</button>
+    </div>
+  </section>
+
+  <!-- Board -->
+  <section id="app" class="screen" hidden>
+    <header class="topbar">
+      <button id="btn-back" title="Projekt wechseln">◂ Projekte</button>
+      <span id="project-name" class="project-name"></span>
+      <nav id="tabs" class="tabs"></nav>
+      <button id="btn-add-tab" title="Neuer Tab">＋</button>
+      <span class="spacer"></span>
+      <span id="save-state" class="muted small"></span>
+      <span id="zoom-label" class="muted small"></span>
+    </header>
+    <div class="main">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <strong>Bilder</strong>
+          <span id="image-count" class="muted small"></span>
+        </div>
+        <p class="muted small">Klick oder Ziehen legt ein Bild aufs Board.</p>
+        <ul id="image-list" class="image-list"></ul>
+      </aside>
+      <div id="viewport" class="viewport" tabindex="0">
+        <div id="world" class="world"></div>
+        <div id="board-empty" class="board-empty muted" hidden>Leeres Board – Bilder links anklicken oder hierher ziehen.</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>

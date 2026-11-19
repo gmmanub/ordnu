@@ -1,0 +1,54 @@
+# ordnu – NDA-Schutz: niemals Projektinhalte ins Repo
+
+# App-Daten (Boards, Tags, Vorschaubilder)
+.ordnu/
+**/.ordnu/
+
+# Bilder
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.avif
+*.gif
+*.bmp
+*.tif
+*.tiff
+*.exr
+*.dpx
+*.psd
+*.psb
+*.heic
+*.heif
+*.raw
+*.cr2
+*.cr3
+*.nef
+*.arw
+*.dng
+
+# Video
+*.mp4
+*.mov
+*.mxf
+*.avi
+*.mkv
+*.webm
+*.prores
+
+# Dokumente / Projektdateien
+*.pdf
+*.zip
+*.rar
+*.7z
+
+# System / Werkzeuge
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
+__pycache__/
+tests/output/
+
+# Ausnahme: App-Symbole (selbst gezeichnet, keine Projektinhalte)
+!icons/*.png
